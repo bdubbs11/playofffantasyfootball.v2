@@ -8,6 +8,9 @@ import json
 import time
 import re
 
+import sys
+import os
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -24,7 +27,7 @@ TEAM_NAME_TO_ABBR = {
     "raiders": "LV", "chargers": "LAC", "rams": "LAR", "dolphins": "MIA",
     "vikings": "MIN", "patriots": "NE", "saints": "NO", "giants": "NYG",
     "jets": "NYJ", "eagles": "PHI", "steelers": "PIT", "49ers": "SF",
-    "seahawks": "SEA", "buccaneers": "TB", "titans": "TEN", "commanders": "WAS"
+    "seahawks": "SEA", "buccaneers": "TB", "titans": "TEN", "commanders": "WSH"
 }
 
 def get_team_abbrev(team_name):
@@ -68,18 +71,36 @@ def fetch_page_with_requests(url):
     return response.text
 
 def extract_teams_from_title(soup):
-    """Extract team names and scores from page title"""
-    title = soup.title.string if soup.title else ""
-    match = re.search(r'(.+?)\s+(\d+)-(\d+)\s+(.+?)\s+\(', title)
-    if not match:
-        return "Team 1", "Team 2", 0, 0
+    """
+    Extract teams from SCORE TABLE (table 0), not page title.
+    Left row = away team, right row = home team.
+    """
+    tables = soup.find_all("table")
+    if not tables:
+        print("⚠️ No tables found for team extraction")
+        return "Team 1", "Team 2"
 
-    team1 = match.group(1).strip()
-    score1 = int(match.group(2))
-    score2 = int(match.group(3))
-    team2 = match.group(4).strip()
+    score_rows = tables[0].find_all("tr")
+    teams = []
 
-    return team1, team2, score1, score2
+    for row in score_rows[1:]:
+        cells = row.find_all("td")
+        if not cells:
+            continue
+        team_raw = cells[0].get_text(strip=True)
+
+        # Clean "JetsNYJ" → "Jets"
+        team_name = re.sub(r'[A-Z]{2,3}$', '', team_raw).strip()
+        teams.append(team_name)
+
+    if len(teams) != 2:
+        print("⚠️ Unexpected score table format")
+        return "Team 1", "Team 2"
+
+    print(f"✅ Teams detected from score table: {teams[0]} vs {teams[1]}")
+    return teams[0], teams[1]
+
+
 def classify_category(headers):
     # print(f"classifying category headers: {headers}")
     """Classify what type of stats this table contains"""
@@ -372,6 +393,7 @@ def parse_tables(tables, team1, team2, driver):
         headers = [th.get_text(strip=True) for th in stat_table.find_all("th")]
         stat_rows = extract_rows(stat_table)[1:]  # skip header 
         category = classify_category(headers)
+        # only kicker needs this info
         team = team1 if (idx // 2) % 2 == 0 else team2
         opponent = team1 if team == team2 else team2
 
@@ -429,18 +451,31 @@ def parse_tables(tables, team1, team2, driver):
 
             # --- Kicker field goals scrape ---
             if category == "kicking" and driver and player in player_links:
-              print(f"Scraping kicker stats for {player} ({team}) vs {opponent}")
-              kicks = scrape_kicker_details(
-                  driver,
-                  player_links[player],
-                  get_team_abbrev(opponent),
-                  int(game["score"].get(team, 0)),
-                  int(game["score"].get(opponent, 0))
-              )
-              print(f"Found {len(kicks)} kicks for {player}")
-              if kicks:
-                  stats_dict["field_goals"] = kicks
+                # Assign team and opponent deterministically: first kicker table = team1 vs team2, second = team2 vs team1
+                if not hasattr(parse_tables, "_kicker_call_count"):
+                    parse_tables._kicker_call_count = 0
+                if parse_tables._kicker_call_count % 2 == 0:
+                    kicker_team = team1
+                    kicker_opponent = team2
+                else:
+                    kicker_team = team2
+                    kicker_opponent = team1
+                parse_tables._kicker_call_count += 1
 
+                print(f"Scraping kicker stats for {player} ({kicker_team}) vs {kicker_opponent}")
+                kicks = scrape_kicker_details(
+                    driver,
+                    player_links[player],
+                    get_team_abbrev(kicker_opponent),
+                    int(game["score"].get(kicker_team, 0)),
+                    int(game["score"].get(kicker_opponent, 0))
+                )
+                print(f"Found {len(kicks)} kicks for {player}")
+                if kicks:
+                    stats_dict["field_goals"] = kicks
+
+                # Override the team in the player record (important if it was saved wrong earlier)
+                game["players"][player]["team"] = kicker_team
 
             if stats_dict:
                 # Merge stats_dict with existing player stats to avoid overwriting
@@ -474,7 +509,7 @@ def scrape_game_stats(game_id, driver=None):
     html = fetch_page_with_requests(url)
     soup = BeautifulSoup(html, "lxml")
 
-    team1, team2, score1, score2 = extract_teams_from_title(soup)
+    team1, team2 = extract_teams_from_title(soup)
 
     print(f"\nTeams detected:")
     print(f"  {team1} vs {team2}")
@@ -525,7 +560,7 @@ def scrape_game_stats(game_id, driver=None):
               f"{d_stats['sacks']} sacks, {d_stats['defensive_tds']} TD, {d_stats['points_allowed']} pts allowed")
 
     # Save to JSON
-    output_file = f"game_{game_id}_stats.json"
+    output_file = f"game_stats_output.json"
     with open(output_file, "w") as f:
         json.dump(game_data, f, indent=2)
     print(f"\n✅ Data saved to {output_file}")
@@ -536,21 +571,61 @@ def scrape_game_stats(game_id, driver=None):
 # MAIN EXECUTION
 # ============================================================================
 
+# if __name__ == "__main__":
+#     print("="*60)
+#     print("🏈 NFL FANTASY FOOTBALL STATS SCRAPER")
+#     print("="*60)
+    
+#     print("\n📋 TEST MODE: Scraping single game")
+#     test_game_id = "401772900"
+    
+#     driver = setup_driver()
+#     try:
+#         game_data = scrape_game_stats(test_game_id, driver)
+        
+#     finally:
+#         driver.quit()
+    
+#     print("\n" + "="*60)
+#     print("✅ SCRAPING COMPLETE!")
+#     print("="*60)
+
+
 if __name__ == "__main__":
     print("="*60)
     print("🏈 NFL FANTASY FOOTBALL STATS SCRAPER")
     print("="*60)
-    
-    print("\n📋 TEST MODE: Scraping single game")
-    test_game_id = "401772900"
-    
+
+    # Check if a game URL or ID is passed as an argument
+    if len(sys.argv) > 1:
+        game_url_or_id = sys.argv[1]
+        print(f"\n📋 Scraping game: {game_url_or_id}")
+    else:
+        game_url_or_id = "401772900"  # fallback test game
+        print("\n📋 TEST MODE: Scraping single game")
+
     driver = setup_driver()
     try:
-        game_data = scrape_game_stats(test_game_id, driver)
-        
+        game_data = scrape_game_stats(game_url_or_id.split("/")[-1] if "http" in game_url_or_id else game_url_or_id, driver)
     finally:
         driver.quit()
+
+    # Save output to a unique file per game
+    # import json
+    # import os
+
+    # If game_url_or_id is a URL, extract ID from it
+    game_id = game_url_or_id.split("/")[-1] if "http" in game_url_or_id else game_url_or_id
+    save_path = f"scraped_games/game_{game_id}.json"
     
-    print("\n" + "="*60)
-    print("✅ SCRAPING COMPLETE!")
+    os.makedirs("scraped_games", exist_ok=True)
+    with open(save_path, "w") as f:
+        json.dump(game_data, f, indent=4)
+
+    print(f"\n✅ SCRAPING COMPLETE! Saved to {save_path}")
     print("="*60)
+# might need to add a timer rest period to let page load fully before scraping
+# just testing right now but the wifi could also be slow that makes most recent game played also scaped when looking for games from previous year.
+#  (weeks might not matter but will test later)
+
+# rams vs seahawks 2025 week 15 does not have proper rams defense stats. no clue why not will need to hammer debug again and check later. 

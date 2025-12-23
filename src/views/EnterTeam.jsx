@@ -1,6 +1,11 @@
 import React, {useState} from 'react';
 import { teamSeeds } from '../components/teamseeds';
 
+
+// i will have password protection to submit your team to the database. and then i will have
+// you enter yoru email so i can confrim you only created one team. very loose managment.
+
+
 function EnterTeam(){
   const [formData, setFormData] = useState({
     yourName: '',
