@@ -93,17 +93,47 @@ function EnterTeam(){
       return;
     }
 
-    try {
-      // Check if email already exists
-      const { data: existingTeam, error: checkError } = await supabase
-        .from('fantasy_teams')
-        .select('id')
-        .eq('email', email)
-        .single();
+    // Normalize email: lowercase and trim whitespace
+    const normalizedEmail = email.trim().toLowerCase();
 
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+    try {
+      // Check if email is in invited_emails table (case-insensitive comparison)
+      // Query all invited emails and find match case-insensitively
+      const { data: allInvitedEmails, error: invitedError } = await supabase
+        .from('invited_emails')
+        .select('id, used, email');
+
+      if (invitedError) {
+        throw invitedError;
+      }
+
+      // Find matching email case-insensitively
+      const invitedEmail = allInvitedEmails?.find(
+        inv => inv.email?.toLowerCase().trim() === normalizedEmail
+      );
+
+      if (!invitedEmail) {
+        setSubmitError('This email is not on the invite list. Please use an invited email address.');
+        return;
+      }
+
+      if (invitedEmail.used) {
+        setSubmitError('This email has already been used to create a team. Only one team per email is allowed.');
+        return;
+      }
+
+      // Also check if email already exists in fantasy_teams (extra safety check)
+      const { data: allExistingTeams, error: checkError } = await supabase
+        .from('fantasy_teams')
+        .select('id, email');
+
+      if (checkError) {
         throw checkError;
       }
+
+      const existingTeam = allExistingTeams?.find(
+        team => team.email?.toLowerCase().trim() === normalizedEmail
+      );
 
       if (existingTeam) {
         setSubmitError('This email has already been used to create a team. Only one team per email is allowed.');
@@ -157,7 +187,7 @@ function EnterTeam(){
       const fantasyTeam = {
         owner_name: formData.yourName,
         team_name: formData.teamName,
-        email: email,
+        email: normalizedEmail,
         players: JSON.stringify({
           qb1: playerMap[formData.qb1],
           qb2: playerMap[formData.qb2],
@@ -184,6 +214,21 @@ function EnterTeam(){
       if (teamError) throw teamError;
 
       console.log('Team saved:', teamData);
+
+      // 7️⃣ Update invited_emails to mark email as used
+      // Use the actual email from the database record for the update
+      const { error: updateError } = await supabase
+        .from('invited_emails')
+        .update({ 
+          used: true,
+          used_at: new Date().toISOString()
+        })
+        .eq('id', invitedEmail.id);
+
+      if (updateError) {
+        console.error('Error updating invited_emails:', updateError);
+        throw updateError;
+      }
 
       // Reset form and navigate to home
       setFormData(initialFormData);
