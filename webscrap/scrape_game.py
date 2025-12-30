@@ -611,14 +611,18 @@ if __name__ == "__main__":
         driver.quit()
 
     # Save output to a unique file per game
-    # import json
-    # import os
-
     # If game_url_or_id is a URL, extract ID from it
     game_id = game_url_or_id.split("/")[-1] if "http" in game_url_or_id else game_url_or_id
-    save_path = f"scraped_games/game_{game_id}.json"
     
-    os.makedirs("scraped_games", exist_ok=True)
+    # Check if folder path was provided as second argument
+    if len(sys.argv) > 2:
+        folder = sys.argv[2]
+    else:
+        folder = "scraped_games"  # Default folder
+    
+    save_path = os.path.join(folder, f"game_{game_id}.json")
+    
+    os.makedirs(folder, exist_ok=True)
     with open(save_path, "w") as f:
         json.dump(game_data, f, indent=4)
 
