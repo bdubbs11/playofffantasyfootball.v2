@@ -3,6 +3,7 @@ import TeamRow from '../components/TeamRow';
 
 function Home(){
   // Sample team data
+  // console.log(import.meta.env.VITE_SUPABASE_ANON_KEY);
   const sampleTeam = [
     {
     rank: 1,

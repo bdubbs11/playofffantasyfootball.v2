@@ -1,13 +1,22 @@
 import React, {useState} from 'react';
 import { teamSeeds } from '../components/teamseeds';
+import { validateTeam } from '../components/TeamValidator';
+import { useNavigate } from 'react-router-dom';
 
+// imports for supabase and submit team
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseURL = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseURL, supabaseAnonKey);
 
 // i will have password protection to submit your team to the database. and then i will have
 // you enter yoru email so i can confrim you only created one team. very loose managment.
 
 
 function EnterTeam(){
-  const [formData, setFormData] = useState({
+  const navigate = useNavigate();
+  const initialFormData = {
     yourName: '',
     teamName: '',
     qb1: '',
@@ -38,10 +47,14 @@ function EnterTeam(){
     'kicker-team': '',
     sbWinner: '',
     'sbWinner-team': '',
-  });
+  };
+  const [formData, setFormData] = useState(initialFormData);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalIssues, setModalIssues] = useState([]);
   const [canSubmit, setCanSubmit] = useState(false);
+  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [submitError, setSubmitError] = useState('');
 
   const handleInputChange = (name, value) => {
     setFormData(prev => ({
@@ -53,219 +66,135 @@ function EnterTeam(){
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    validateTeam();
-  }
-
-  const validateTeam = () => {
-    console.log('=== VALIDATION START ===');
-    console.log('Form Data:', formData);
-    
-    const entries = {
-      qb1: {team: formData["qb1-team"], pos: "QB"},
-      qb2: {team: formData["qb2-team"], pos: "QB"},
-      wr: {team: formData["wr-team"], pos: "WR"},
-      rb: {team: formData["rb-team"], pos: "RB"},
-      te: {team: formData["te-team"], pos: "TE"},
-  
-      flex1: {team: formData["flex1-team"], pos: formData["flex1-truepos"]},
-      flex2: {team: formData["flex2-team"], pos: formData["flex2-truepos"]},
-      flex3: {team: formData["flex3-team"], pos: formData["flex3-truepos"]},
-      flex4: {team: formData["flex4-team"], pos: formData["flex4-truepos"]},
-  
-      def: {team: formData["def-team"], pos: "Defense"},
-      kicker: {team: formData["kicker-team"], pos: "Kicker"},
-      sbWinner: {team: formData["sbWinner-team"], pos: "SB Winner"},
-    };
-    console.log('Entries:', entries);
-    
-    const issues = [];
-
-    // Helper maps
-    const teamCounts = {};
-    const seedCounts = { "6or7": 0, "4or5": 0 };
-    const teamsUsed = new Set();
-    const qbTeams = [];
-    const qbConferences = new Set();
-
-    // Loop players
-    Object.values(entries).forEach(p => {
-      if (!p.team) return;
-
-      // Count total players per team (Rule 4)
-      teamCounts[p.team] = (teamCounts[p.team] || 0) + 1;
-
-      // Track different teams (Rule 3)
-      teamsUsed.add(p.team);
-
-      // Get seeds
-      const seed = teamSeeds.AFC[p.team] || teamSeeds.NFC[p.team];
-      console.log(`Player ${p.pos} from ${p.team} - Seed: ${seed}`);
-
-      if (seed === 6 || seed === 7) seedCounts["6or7"]++;
-      if (seed === 4 || seed === 5) seedCounts["4or5"]++;
-
-      // Gather QB info (Rule 6)
-      if (p.pos === "QB") {
-        qbTeams.push(p.team);
-
-        const conf = teamSeeds.AFC[p.team] ? "AFC" : "NFC";
-        qbConferences.add(conf);
-      }
-    });
-
-    console.log('Team Counts:', teamCounts);
-    console.log('Seed Counts:', seedCounts);
-    console.log('Teams Used (Set):', Array.from(teamsUsed));
-    console.log('Teams Used Count:', teamsUsed.size);
-    console.log('QB Teams:', qbTeams);
-    console.log('QB Conferences (Set):', Array.from(qbConferences));
-
-    // -----------------------------
-    // RULE 1 — Must have 2 players from seeds 6 or 7
-    // -----------------------------
-    console.log('RULE 1 Check - Seed 6or7 count:', seedCounts["6or7"], 'Required: 2');
-    if (seedCounts["6or7"] < 2) {
-      issues.push("You must have at least **2 players from a #6 or #7 seed team**.");
-      console.log('❌ RULE 1 FAILED');
-    } else {
-      console.log('✅ RULE 1 PASSED');
-    }
-
-    // -----------------------------
-    // RULE 2 — Must have 1 player from seeds 4 or 5
-    // -----------------------------
-    console.log('RULE 2 Check - Seed 4or5 count:', seedCounts["4or5"], 'Required: 1');
-    if (seedCounts["4or5"] < 1) {
-      issues.push("You must have at least **1 player from a #4 or #5 seed team**.");
-      console.log('❌ RULE 2 FAILED');
-    } else {
-      console.log('✅ RULE 2 PASSED');
-    }
-
-    // -----------------------------
-    // RULE 3 — Players from at least 9 different teams
-    // -----------------------------
-    console.log('RULE 3 Check - Unique teams:', teamsUsed.size, 'Required: 9');
-    if (teamsUsed.size < 9) {
-      issues.push("You must have players from at least **9 different teams**.");
-      console.log('❌ RULE 3 FAILED');
-    } else {
-      console.log('✅ RULE 3 PASSED');
-    }
-
-    // -----------------------------
-    // RULE 4 — No more than 3 players from one team
-    // -----------------------------
-    console.log('RULE 4 Check - Team counts:', teamCounts);
-    let rule4Passed = true;
-    Object.entries(teamCounts).forEach(([team, count]) => {
-      if (count > 3) {
-        issues.push(`You selected **${count} players from ${team}**. Max allowed is 3.`);
-        console.log(`❌ RULE 4 FAILED - ${team} has ${count} players (max 3)`);
-        rule4Passed = false;
-      }
-    });
-    if (rule4Passed) {
-      console.log('✅ RULE 4 PASSED');
-    }
-
-    // -----------------------------
-    // RULE 5 — No stacking (QB/WR/TE from same team)
-    // -----------------------------
-    const WRteam = entries.wr.team;
-    const TEteam = entries.te.team;
-    const flexTeams = [
-      entries.flex1,
-      entries.flex2,
-      entries.flex3,
-      entries.flex4
-    ].filter(f => f.pos === "WR" || f.pos === "TE").map(f => f.team);
-
-    console.log('RULE 5 Check - WR team:', WRteam, 'TE team:', TEteam);
-    console.log('RULE 5 Check - QB teams:', qbTeams);
-    console.log('RULE 5 Check - Flex WR/TE teams:', flexTeams);
-
-    let rule5Passed = true;
-    qbTeams.forEach(qbTeam => {
-      if (qbTeam === WRteam) {
-        issues.push("QB and WR cannot be from the same team.");
-        console.log(`❌ RULE 5 FAILED - QB ${qbTeam} matches WR team`);
-        rule5Passed = false;
-      }
-      if (qbTeam === TEteam) {
-        issues.push("QB and TE cannot be from the same team.");
-        console.log(`❌ RULE 5 FAILED - QB ${qbTeam} matches TE team`);
-        rule5Passed = false;
-      }
-      if (flexTeams.includes(qbTeam)) {
-        issues.push("QB cannot match the team of any WR/TE flex players.");
-        console.log(`❌ RULE 5 FAILED - QB ${qbTeam} matches flex WR/TE team`);
-        rule5Passed = false;
-      }
-    });
-    if (rule5Passed) {
-      console.log('✅ RULE 5 PASSED');
-    }
-
-    // -----------------------------
-    // RULE 6 — QBs must be:
-    //    - from different conferences
-    //    - at least 1 must play Wildcard Weekend (not a #1 seed)
-    // -----------------------------
-    console.log('RULE 6 Check - QB Conferences count:', qbConferences.size, 'Required: 2');
-    if (qbConferences.size !== 2) {
-      issues.push("Your two QBs must be from **different conferences (AFC + NFC)**.");
-      console.log('❌ RULE 6 FAILED - Conferences check');
-    } else {
-      console.log('✅ RULE 6 PASSED - Conferences check');
-    }
-
-    // At least ONE QB must NOT be seed #1
-    const qbSeeds = qbTeams.map(t =>
-      teamSeeds.AFC[t] || teamSeeds.NFC[t]
-    );
-    console.log('RULE 6 Check - QB Seeds:', qbSeeds);
-
-    if (!qbSeeds.some(seed => seed !== 1)) {
-      issues.push("At least **one QB must play on Wildcard Weekend** (cannot be both #1 seeds).");
-      console.log('❌ RULE 6 FAILED - Both QBs are #1 seeds');
-    } else {
-      console.log('✅ RULE 6 PASSED - At least one QB is not #1 seed');
-    }
-
-    // -----------------------------
-    // RULE 7 — No more than 4 players from #1 seeds
-    // -----------------------------
-    let numFromOnes = 0;
-    const playersFromOnes = [];
-    Object.entries(entries).forEach(([k, p]) => {
-      if (!p.team) return;
-      const seed = teamSeeds.AFC[p.team] || teamSeeds.NFC[p.team];
-      if (seed === 1) {
-        numFromOnes++;
-        playersFromOnes.push(`${p.pos} from ${p.team}`);
-      }
-    });
-
-    console.log('RULE 7 Check - Players from #1 seeds:', numFromOnes, 'Max allowed: 4');
-    console.log('RULE 7 Check - Players from #1 seeds list:', playersFromOnes);
-    if (numFromOnes > 4) {
-      issues.push("You may not have more than **4 total players from the #1 seeds**.");
-      console.log('❌ RULE 7 FAILED');
-    } else {
-      console.log('✅ RULE 7 PASSED');
-    }
-
-    console.log('=== VALIDATION RESULTS ===');
-    console.log('Total Issues Found:', issues.length);
-    console.log('Issues Array:', issues);
-    console.log('Can Submit:', issues.length === 0);
-    console.log('=== VALIDATION END ===\n');
-
-    setModalIssues(issues);
-    setCanSubmit(issues.length === 0);
+    const validationResult = validateTeam(formData);
+    setModalIssues(validationResult.issues);
+    setCanSubmit(validationResult.isValid);
     setModalOpen(true);
+    // Reset password and email when modal opens
+    setPassword('');
+    setEmail('');
+    setSubmitError('');
   }
+
+  const submitTeam = async () => {
+    setSubmitError('');
+    
+    // Validate password
+    const correctPassword = import.meta.env.VITE_PLAYOFF_PASSWORD;
+    if (password !== correctPassword) {
+      setSubmitError('Incorrect password');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setSubmitError('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      // Check if email already exists
+      const { data: existingTeam, error: checkError } = await supabase
+        .from('fantasy_teams')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        throw checkError;
+      }
+
+      if (existingTeam) {
+        setSubmitError('This email has already been used to create a team. Only one team per email is allowed.');
+        return;
+      }
+
+      // 1️⃣ Build the list of players from formData
+      const playersList = [
+        { name: formData.qb1, team: formData['qb1-team'], position: "QB" },
+        { name: formData.qb2, team: formData['qb2-team'], position: "QB" },
+        { name: formData.wr, team: formData['wr-team'], position: "WR" },
+        { name: formData.rb, team: formData['rb-team'], position: "RB" },
+        { name: formData.te, team: formData['te-team'], position: "TE" },
+        { name: formData.flex1, team: formData['flex1-team'], position: formData['flex1-truepos'] },
+        { name: formData.flex2, team: formData['flex2-team'], position : formData['flex2-truepos'] },
+        { name: formData.flex3, team: formData['flex3-team'], position: formData['flex3-truepos'] },
+        { name: formData.flex4, team: formData['flex4-team'], position: formData['flex4-truepos'] },
+        { name: formData.def, team: formData['def-team'], position: "DEF" },
+        { name: formData.kicker, team: formData['kicker-team'], position: "K" },
+        { name: formData.sbWinner, team: formData['sbWinner-team'], position: "SB Winner" },
+      ].filter(p => p.name && p.team && p.position);
+
+      // 2️⃣ Get existing players
+      const { data: existingPlayers, error: existingError } = await supabase
+        .from('players')
+        .select('id, name');
+
+      if (existingError) throw existingError;
+
+      const existingNames = new Set(existingPlayers.map(p => p.name));
+
+      // 3️⃣ Insert only new players
+      const newPlayers = playersList.filter(p => !existingNames.has(p.name));
+      let insertedPlayers = [];
+      if (newPlayers.length > 0) {
+        const { data, error: insertError } = await supabase
+          .from('players')
+          .insert(newPlayers)
+          .select();
+
+        if (insertError) throw insertError;
+        insertedPlayers = data;
+      }
+
+      // 4️⃣ Combine existing + inserted players to build a map
+      const allPlayers = [...existingPlayers, ...insertedPlayers];
+      const playerMap = {};
+      allPlayers.forEach(p => playerMap[p.name] = p.id);
+
+      // 5️⃣ Build fantasy team object
+      const fantasyTeam = {
+        owner_name: formData.yourName,
+        team_name: formData.teamName,
+        email: email,
+        players: JSON.stringify({
+          qb1: playerMap[formData.qb1],
+          qb2: playerMap[formData.qb2],
+          wr: playerMap[formData.wr],
+          rb: playerMap[formData.rb],
+          te: playerMap[formData.te],
+          flex1: playerMap[formData.flex1],
+          flex2: playerMap[formData.flex2],
+          flex3: playerMap[formData.flex3],
+          flex4: playerMap[formData.flex4],
+          def: playerMap[formData.def],
+          kicker: playerMap[formData.kicker],
+          sbWinner: playerMap[formData.sbWinner],
+        }),
+        total_points: 0,
+        rank: 0,
+      };
+
+      // 6️⃣ Insert fantasy team into the database
+      const { data: teamData, error: teamError } = await supabase
+        .from('fantasy_teams')
+        .insert([fantasyTeam]);
+
+      if (teamError) throw teamError;
+
+      console.log('Team saved:', teamData);
+
+      // Reset form and navigate to home
+      setFormData(initialFormData);
+      setModalOpen(false);
+      navigate('/');
+
+    } catch (err) {
+      console.error(err);
+      setSubmitError('An error occurred while submitting your team. Please try again.');
+    }
+  };
 
 
 
@@ -456,18 +385,53 @@ function EnterTeam(){
             </ul>
           )}
 
-          {canSubmit && <p className="text-black">Everything looks good! You are ready to submit!</p>}
+          {canSubmit && (
+            <>
+              <p className="text-black mb-4">Everything looks good! You are ready to submit!</p>
+              
+              <div className="flex flex-col gap-3 mb-4">
+                <div className="flex flex-col">
+                  <label htmlFor="modal-email" className="text-gray-700 mb-2 font-semibold mb-1 text-sm">Email</label>
+                  <input 
+                    type="email" 
+                    id="modal-email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="border-2 border-gray-400 rounded-md px-3 py-2 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all"
+                    placeholder="Enter your email"
+                  />
+                </div>
+                
+                <div className="flex flex-col">
+                  <label htmlFor="modal-password" className="text-gray-700 font-semibold mb-1 text-sm">Password</label>
+                  <input 
+                    type="password" 
+                    id="modal-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        submitTeam();
+                      }
+                    }}
+                    className="border-2 border-gray-400 rounded-md px-3 py-2 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all"
+                    placeholder="Enter password"
+                  />
+                </div>
+              </div>
+
+              {submitError && (
+                <p className="text-red-600 text-sm mb-3">{submitError}</p>
+              )}
+            </>
+          )}
 
           <div className="flex justify-between gap-3 mt-5 mx-auto">
             <button onClick={() => setModalOpen(false)} className="px-4 py-2 bg-gray-500 rounded ease-in-out duration-300">Close</button>
 
             {canSubmit && (
               <button
-                onClick={() => {
-                  setModalOpen(false);
-                  console.log('Submit to backend:', formData);
-                  // TODO: API POST here
-                }}
+                onClick={submitTeam}
                 className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded ease-in-out duration-300"
               >
                 Submit
