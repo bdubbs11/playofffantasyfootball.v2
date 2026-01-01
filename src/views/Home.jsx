@@ -1,83 +1,144 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import TeamRow from '../components/TeamRow';
+import { supabase } from '../lib/supabase';
 
 function Home(){
-  // Sample team data
-  // console.log(import.meta.env.VITE_SUPABASE_ANON_KEY);
-  const sampleTeam = [
-    {
-    rank: 1,
-    ownerName: "John Doe",
-    teamName: "The Champions",
-    totalPoints: 125.5,
-    qb1: { name: "Patrick Mahomes", points: 28.5 },
-    qb2: { name: "Josh Allen", points: 25.2 },
-    wr: { name: "Tyreek Hill", points: 18.3 },
-    rb: { name: "Derrick Henry", points: 15.8 },
-    te: { name: "Travis Kelce", points: 12.4 },
-    flex1: { name: "Davante Adams", points: 16.2 },
-    flex2: { name: "Austin Ekeler", points: 14.7 },
-    flex3: { name: "Cooper Kupp", points: 13.9 },
-    flex4: { name: "Jonathan Taylor", points: 11.5 },
-    sbWinner: { name: "Kansas City Chiefs", points: 20.0 },
-    def: { name: "Buffalo Bills", points: 8.5 },
-    k: { name: "Justin Tucker", points: 12.0 },
-  },
-  {
-    rank: 2,
-    ownerName: "Jane Doe",
-    teamName: "The Runners Up",
-    totalPoints: 120.0,
-    qb1: { name: "Lamar Jackson", points: 28.5 },
-    qb2: { name: "Josh Allen", points: 25.2 },
-    wr: { name: "Tyreek Hill", points: 18.3 },
-    rb: { name: "Derrick Henry", points: 15.8 },
-    te: { name: "Travis Kelce", points: 12.4 },
-    flex1: { name: "Davante Adams", points: 16.2 },
-    flex2: { name: "Austin Ekeler", points: 14.7 },
-    flex3: { name: "Cooper Kupp", points: 13.9 },
-    flex4: { name: "Jonathan Taylor", points: 11.5 },
-    sbWinner: { name: "Kansas City Chiefs", points: 20.0 },
-    def: { name: "Buffalo Bills", points: 8.5 },
-    k: { name: "Justin Tucker", points: 12.0 },
-  },
-  {
-    rank: 3,
-    ownerName: "Jim Doe",
-    teamName: "The Third Place Team",
-    totalPoints: 115.0,
-    qb1: { name: "Lamar Jackson", points: 28.5 },
-    qb2: { name: "Josh Allen", points: 25.2 },
-    wr: { name: "Tyreek Hill", points: 18.3 },
-    rb: { name: "Derrick Henry", points: 15.8 },
-    te: { name: "Travis Kelce", points: 12.4 },
-    flex1: { name: "Davante Adams", points: 16.2 },
-    flex2: { name: "Austin Ekeler", points: 14.7 },
-    flex3: { name: "Cooper Kupp", points: 13.9 },
-    flex4: { name: "Jonathan Taylor", points: 11.5 },
-    sbWinner: { name: "Kansas City Chiefs", points: 20.0 },
-    def: { name: "Buffalo Bills", points: 8.5 },
-    k: { name: "Justin Tucker", points: 12.0 },
-  },
-  {
-    rank: 4,
-    ownerName: "Jill Doe",
-    teamName: "The Fourth Place Team",
-    totalPoints: 110.0,
-    qb1: { name: "Lamar Jackson", points: 28.5 },
-    qb2: { name: "Josh Allen", points: 25.2 },
-    wr: { name: "Tyreek Hill", points: 18.3 },
-    rb: { name: "Derrick Henry", points: 15.8 },
-    te: { name: "Travis Kelce", points: 12.4 },
-    flex1: { name: "Davante Adams", points: 16.2 },
-    flex2: { name: "Austin Ekeler", points: 14.7 },
-    flex3: { name: "Cooper Kupp", points: 13.9 },
-    flex4: { name: "Jonathan Taylor", points: 11.5 },
-    sbWinner: { name: "Kansas City Chiefs", points: 20.0 },
-    def: { name: "Buffalo Bills", points: 8.5 },
-    k: { name: "Justin Tucker", points: 12.0 },
-  },
-];
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchTeams();
+  }, []);
+
+  const fetchTeams = async () => {
+    try {
+      // 1. Fetch all fantasy teams
+      const { data: fantasyTeams, error: teamsError } = await supabase
+        .from('fantasy_teams')
+        .select('*');
+
+      if (teamsError) throw teamsError;
+
+      if (!fantasyTeams || fantasyTeams.length === 0) {
+        setTeams([]);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Extract all unique player IDs from all teams
+      const allPlayerIds = new Set();
+      fantasyTeams.forEach(team => {
+        try {
+          // Parse the double-encoded JSON string (may need to parse twice)
+          let playersJson = team.players;
+          if (typeof playersJson === 'string') {
+            playersJson = JSON.parse(playersJson);
+            // If it's still a string, parse again
+            if (typeof playersJson === 'string') {
+              playersJson = JSON.parse(playersJson);
+            }
+          }
+          const playerIds = Object.values(playersJson);
+          playerIds.forEach(id => {
+            if (id) allPlayerIds.add(id);
+          });
+        } catch (e) {
+          console.error('Error parsing players JSON:', e, team.players);
+        }
+      });
+
+      // 3. Fetch all players by IDs (include points field)
+      const { data: players, error: playersError } = await supabase
+        .from('players')
+        .select('id, name, points')
+        .in('id', Array.from(allPlayerIds));
+
+      if (playersError) throw playersError;
+
+      // 4. Create a map of player ID to full player object (including points)
+      const playerMap = {};
+      players?.forEach(player => {
+        playerMap[player.id] = player;
+      });
+
+      // 5. Transform fantasy teams to match TeamRow format
+      const transformedTeams = fantasyTeams.map(team => {
+        try {
+          // Parse the double-encoded JSON (may need to parse twice)
+          let playersJson = team.players;
+          if (typeof playersJson === 'string') {
+            playersJson = JSON.parse(playersJson);
+            // If it's still a string, parse again
+            if (typeof playersJson === 'string') {
+              playersJson = JSON.parse(playersJson);
+            }
+          }
+          
+          // Helper to get player data (name and points for each round)
+          const getPlayerData = (playerId) => {
+            const player = playerMap[playerId];
+            if (!player) {
+              return {
+                name: 'Unknown',
+                points: {
+                  wildcard: 0,
+                  divisional: 0,
+                  conference: 0,
+                  superBowl: 0
+                }
+              };
+            }
+            
+            // Parse points array: [wildcard, divisional, conference, superBowl]
+            const pointsArray = player.points || [];
+            return {
+              name: player.name || 'Unknown',
+              points: {
+                wildcard: parseFloat(pointsArray[0] || 0) || 0,
+                divisional: parseFloat(pointsArray[1] || 0) || 0,
+                conference: parseFloat(pointsArray[2] || 0) || 0,
+                superBowl: parseFloat(pointsArray[3] || 0) || 0
+              }
+            };
+          };
+
+          return {
+            ownerName: team.owner_name || '',
+            teamName: team.team_name || '',
+            totalPoints: parseFloat(team.total_points) || 0,
+            qb1: getPlayerData(playersJson.qb1),
+            qb2: getPlayerData(playersJson.qb2),
+            wr: getPlayerData(playersJson.wr),
+            rb: getPlayerData(playersJson.rb),
+            te: getPlayerData(playersJson.te),
+            flex1: getPlayerData(playersJson.flex1),
+            flex2: getPlayerData(playersJson.flex2),
+            flex3: getPlayerData(playersJson.flex3),
+            flex4: getPlayerData(playersJson.flex4),
+            k: getPlayerData(playersJson.kicker),
+            def: getPlayerData(playersJson.def),
+            sbWinner: getPlayerData(playersJson.sbWinner),
+          };
+        } catch (e) {
+          console.error('Error transforming team:', e, team);
+          return null;
+        }
+      }).filter(team => team !== null);
+
+      // 6. Sort teams by total points (descending) and assign ranks
+      transformedTeams.sort((a, b) => b.totalPoints - a.totalPoints);
+      transformedTeams.forEach((team, index) => {
+        team.rank = index + 1;
+      });
+
+      setTeams(transformedTeams);
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+      setTeams([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col flex-1 min-h-screen">
@@ -106,26 +167,23 @@ function Home(){
               <div className="text-center">Flex 2</div>
               <div className="text-center">Flex 3</div>
               <div className="text-center">Flex 4</div>
-              <div className="text-center">SB Winner</div>
-              <div className="text-center">DEF</div>
               <div className="text-center">K</div>
+              <div className="text-center">DEF</div>
+              <div className="text-center">SB Winner</div>
+              
             </div>
             {/* Team Rows */}
-            {sampleTeam.map((team) => (
-              <TeamRow key={team.rank} team={team} />
-            ))}
+            {loading ? (
+              <div className="text-white text-center py-8">Loading teams...</div>
+            ) : teams.length > 0 ? (
+              teams.map((team) => (
+                <TeamRow key={team.rank} team={team} />
+              ))
+            ) : (
+              <div className="text-white text-center py-8">No teams found. Be the first to submit a team!</div>
+            )}
             </div>
           </div>
-
-          {/* header section above team names */}
-          {/* <div className="flex flex-row items-center justify-between">
-            <div className="flex flex-col items-center justify-center">
-              <h2 className="text-2xl font-bold">Team Names</h2>
-            </div>
-            <div className="flex flex-col items-center justify-center">
-              <h2 className="text-2xl font-bold">Team Names</h2>
-            </div>
-          </div> */}
 
         </div>
       </div>
