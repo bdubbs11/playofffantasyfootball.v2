@@ -296,9 +296,16 @@ function EnterTeam(){
       
       let insertedPlayers = [];
       if (newPlayers.length > 0) {
+        // Add points and won arrays to new players (4 nulls for 4 rounds)
+        const playersToInsert = newPlayers.map(p => ({
+          ...p,
+          points: [null, null, null, null],
+          won: [null, null, null, null]
+        }));
+        
         const { data, error: insertError } = await supabase
           .from('players')
-          .insert(newPlayers)
+          .insert(playersToInsert)
           .select();
 
         if (insertError) throw insertError;

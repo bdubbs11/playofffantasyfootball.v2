@@ -47,10 +47,10 @@ function Home(){
         }
       });
 
-      // 3. Fetch all players by IDs (include points field)
+      // 3. Fetch all players by IDs (include points and won fields)
       const { data: players, error: playersError } = await supabase
         .from('players')
-        .select('id, name, points')
+        .select('id, name, points, won')
         .in('id', Array.from(allPlayerIds));
 
       if (playersError) throw playersError;
@@ -74,7 +74,7 @@ function Home(){
             }
           }
           
-          // Helper to get player data (name and points for each round)
+          // Helper to get player data (name, points, and won status for each round)
           const getPlayerData = (playerId) => {
             const player = playerMap[playerId];
             if (!player) {
@@ -85,20 +85,40 @@ function Home(){
                   divisional: 0,
                   conference: 0,
                   superBowl: 0
-                }
+                },
+                won: {
+                  wildcard: null,
+                  divisional: null,
+                  conference: null,
+                  superBowl: null
+                },
+                isEliminated: false
               };
             }
             
             // Parse points array: [wildcard, divisional, conference, superBowl]
             const pointsArray = player.points || [];
+            // Parse won array: [wildcard, divisional, conference, superBowl]
+            const wonArray = player.won || [];
+            
+            // Check if player is eliminated (any round is false)
+            const isEliminated = wonArray.some(won => won === false);
+            
             return {
               name: player.name || 'Unknown',
               points: {
-                wildcard: parseFloat(pointsArray[0] || 0) || 0,
-                divisional: parseFloat(pointsArray[1] || 0) || 0,
-                conference: parseFloat(pointsArray[2] || 0) || 0,
-                superBowl: parseFloat(pointsArray[3] || 0) || 0
-              }
+                wildcard: pointsArray[0] !== null && pointsArray[0] !== undefined ? parseFloat(pointsArray[0]) : null,
+                divisional: pointsArray[1] !== null && pointsArray[1] !== undefined ? parseFloat(pointsArray[1]) : null,
+                conference: pointsArray[2] !== null && pointsArray[2] !== undefined ? parseFloat(pointsArray[2]) : null,
+                superBowl: pointsArray[3] !== null && pointsArray[3] !== undefined ? parseFloat(pointsArray[3]) : null
+              },
+              won: {
+                wildcard: wonArray[0] !== undefined ? wonArray[0] : null,
+                divisional: wonArray[1] !== undefined ? wonArray[1] : null,
+                conference: wonArray[2] !== undefined ? wonArray[2] : null,
+                superBowl: wonArray[3] !== undefined ? wonArray[3] : null
+              },
+              isEliminated
             };
           };
 
