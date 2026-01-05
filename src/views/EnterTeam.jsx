@@ -10,28 +10,67 @@ const supabaseURL = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseURL, supabaseAnonKey);
 
-// Special player name mappings for abbreviations/nicknames
-const SPECIAL_PLAYER_NAME_MAPPINGS = {
+// Canonical name mappings - maps any variant to the canonical database name
+// Use ESPN's name format as canonical (what actually appears in scraped data)
+const CANONICAL_NAME_MAPPINGS = {
+  // Suffix variations - map to canonical (database stores canonical)
+  'brian thomas': 'brian thomas jr',
+  'travis etienne': 'travis etienne jr',
+  'luther burden iii': 'luther burden',  // Strip III for storage
+  'luther burden': 'luther burden',      // Also handle without suffix
+  
+  // Dot/period variations
+  'a.j. brown': 'aj brown',
+  'aj brown': 'aj brown',
+  'c.j. stroud': 'cj stroud',
+  'cj stroud': 'cj stroud',
+  
+  // Existing mappings
   'jsn': 'jaxon smith-njigba',
   'cmc': 'christian mccaffrey',
+  'andres borregales': 'andy borregales',
 };
 
-// Normalize player name for comparison (case-insensitive, hyphen-insensitive)
+// Create matchable name for comparison (strips suffixes and dots for matching)
+const createMatchableName = (name) => {
+  if (!name) return '';
+  
+  let matchable = name.toLowerCase().trim();
+  
+  // Strip periods from initials (A.J. → AJ, C.J. → CJ)
+  // But preserve single letters that aren't followed by periods (RJ stays RJ)
+  matchable = matchable.replace(/\./g, '');
+  
+  // Strip common suffixes for matching (Jr, Sr, III, II, IV, etc.)
+  // Use word boundaries to avoid matching parts of names
+  matchable = matchable.replace(/\s+(jr|sr|iii|ii|iv|v)$/i, '');
+  
+  // Normalize spaces and hyphens
+  matchable = matchable.replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  return matchable;
+};
+
+// Normalize player name for comparison and get canonical name
 const normalizePlayerName = (name) => {
   if (!name) return '';
   
   const lowerName = name.toLowerCase().trim();
   
-  // Check special cases first
-  if (SPECIAL_PLAYER_NAME_MAPPINGS[lowerName]) {
-    return SPECIAL_PLAYER_NAME_MAPPINGS[lowerName];
+  // Check canonical mappings first (before any processing)
+  if (CANONICAL_NAME_MAPPINGS[lowerName]) {
+    return CANONICAL_NAME_MAPPINGS[lowerName];
   }
   
-  // Normalize: lowercase, replace hyphens with spaces, normalize multiple spaces
-  return lowerName
-    .replace(/-/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Create matchable version and check if matchable version maps to canonical
+  const matchable = createMatchableName(name);
+  if (CANONICAL_NAME_MAPPINGS[matchable]) {
+    return CANONICAL_NAME_MAPPINGS[matchable];
+  }
+  
+  // For storage, use the matchable version (strips dots/suffixes for consistency)
+  // This ensures "A.J. Brown" and "AJ Brown" both become "aj brown"
+  return matchable;
 };
 
 // Calculate Levenshtein distance for fuzzy matching
@@ -65,21 +104,25 @@ const calculateLevenshteinDistance = (str1, str2) => {
   return matrix[len2][len1];
 };
 
-// Find best match with fuzzy matching (max distance of 1-2 for single character differences)
+// Enhanced fuzzy matching that uses matchable names
 const findBestFuzzyMatch = (searchName, existingPlayers, maxDistance = 2) => {
   const normalizedSearch = normalizePlayerName(searchName);
+  const matchableSearch = createMatchableName(searchName);
+  
   let bestMatch = null;
   let bestDistance = Infinity;
 
   for (const player of existingPlayers) {
     const normalizedPlayer = normalizePlayerName(player.name);
+    const matchablePlayer = createMatchableName(player.name);
     
-    // Exact match check first
-    if (normalizedSearch === normalizedPlayer) {
+    // Exact match on normalized (canonical) names
+    if (normalizedSearch === normalizedPlayer || matchableSearch === matchablePlayer) {
       return { match: player, distance: 0 };
     }
     
-    const distance = calculateLevenshteinDistance(normalizedSearch, normalizedPlayer);
+    // Fuzzy match on matchable versions
+    const distance = calculateLevenshteinDistance(matchableSearch, matchablePlayer);
     
     if (distance < bestDistance && distance <= maxDistance) {
       bestDistance = distance;
@@ -291,7 +334,12 @@ function EnterTeam(){
         }
         
         // No match found, add to new players
-        newPlayers.push(p);
+        // Use canonical name from mapping (normalized) to ensure consistency
+        const canonicalName = normalizePlayerName(p.name);
+        newPlayers.push({
+          ...p,
+          name: canonicalName
+        });
       });
       
       let insertedPlayers = [];

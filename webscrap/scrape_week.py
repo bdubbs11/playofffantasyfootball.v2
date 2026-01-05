@@ -118,14 +118,18 @@ def get_expected_game_count(season_type: int, week: int) -> int:
     """Get expected number of games based on season type and week"""
     if season_type == 3:  # Playoffs
         # Playoffs: Wild Card (6), Divisional (4), Conference (2), Super Bowl (1)
+        # Note: On ESPN, week 4 = Pro Bowl (skip), week 5 = Super Bowl
+        # But for our system, Super Bowl is logically week 4
         if week == 1:
             return 6  # Wild Card
         elif week == 2:
             return 4  # Divisional
         elif week == 3:
             return 2  # Conference Championships
+        elif week == 5:
+            return 1  # Super Bowl (week 5 on ESPN, but logically week 4 for us)
         elif week == 4:
-            return 1  # Super Bowl
+            return 0  # Pro Bowl - skip this week
         else:
             return 1
     else:  # Regular season
@@ -165,8 +169,8 @@ def get_playoff_week_name(week: int):
         return "Divisional"
     elif week == 3:
         return "Conference"
-    elif week == 4:
-        return "SuperBowl"
+    elif week == 5:
+        return "SuperBowl"  # Week 5 on ESPN is Super Bowl (logically week 4 for us)
     else:
         return f"Week_{week}"
 
@@ -174,8 +178,13 @@ def get_week_folder(year: int, week: int, season_type: int):
     """Return path to folder for this week"""
     base_folder = "scraped_data"
     if season_type == 3:  # Playoffs
-        week_name = get_playoff_week_name(week)
-        folder = os.path.join(base_folder, str(year), f"Week_{week}_{week_name}")
+        # Special case: Super Bowl is week 5 on ESPN but should be labeled as Week_4_SuperBowl
+        if week == 5:
+            # Week 5 on ESPN = Super Bowl, but folder should be Week_4_SuperBowl
+            folder = os.path.join(base_folder, str(year), "Week_4_SuperBowl")
+        else:
+            week_name = get_playoff_week_name(week)
+            folder = os.path.join(base_folder, str(year), f"Week_{week}_{week_name}")
     else:  # Regular season
         folder = os.path.join(base_folder, str(year), f"Week_{week}_Regular")
     
@@ -194,9 +203,14 @@ def scrape_all_games(links, year: int, week: int, season_type: int):
         subprocess.run(["python", GAME_SCRAPER_SCRIPT, link, folder])
 
 if __name__ == "__main__":
-    week = 17
-    year = 2025
-    season_type = 2
+    week = 5
+    year = 2024
+    season_type = 3
+    
+    # Skip week 4 (Pro Bowl)
+    if week == 4 and season_type == 3:
+        print("⚠️  Week 4 is Pro Bowl - skipping. Use week 5 for Super Bowl.")
+        exit(0)
     
     links = get_box_score_links(week, year, season_type)
     print(f"Found {len(links)} games.")

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 function Home(){
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentRound, setCurrentRound] = useState({ name: 'Wildcard', week: 1 });
 
   useEffect(() => {
     fetchTeams();
@@ -55,13 +56,43 @@ function Home(){
 
       if (playersError) throw playersError;
 
-      // 4. Create a map of player ID to full player object (including points)
+      // 4. Determine current round by checking players' points arrays
+      let highestRoundIndex = -1;
+      players?.forEach(player => {
+        const pointsArray = player.points || [];
+        // Check from highest round (Super Bowl = 3) down to lowest (Wildcard = 0)
+        for (let i = 3; i >= 0; i--) {
+          if (pointsArray[i] !== null && pointsArray[i] !== undefined) {
+            if (i > highestRoundIndex) {
+              highestRoundIndex = i;
+            }
+            break; // Found the highest round for this player, move to next
+          }
+        }
+      });
+
+      // Map round index to round name and week number
+      const roundMap = [
+        { name: 'Wildcard', week: 1 },
+        { name: 'Divisional', week: 2 },
+        { name: 'Conference', week: 3 },
+        { name: 'Super Bowl', week: 4 }
+      ];
+
+      // Default to Wildcard if no data found, otherwise use the highest round found
+      const round = highestRoundIndex >= 0 
+        ? roundMap[highestRoundIndex] 
+        : roundMap[0];
+      
+      setCurrentRound(round);
+
+      // 5. Create a map of player ID to full player object (including points)
       const playerMap = {};
       players?.forEach(player => {
         playerMap[player.id] = player;
       });
 
-      // 5. Transform fantasy teams to match TeamRow format
+      // 6. Transform fantasy teams to match TeamRow format
       const transformedTeams = fantasyTeams.map(team => {
         try {
           // Parse the double-encoded JSON (may need to parse twice)
@@ -145,7 +176,7 @@ function Home(){
         }
       }).filter(team => team !== null);
 
-      // 6. Sort teams by total points (descending) and assign ranks
+      // 7. Sort teams by total points (descending) and assign ranks
       transformedTeams.sort((a, b) => b.totalPoints - a.totalPoints);
       transformedTeams.forEach((team, index) => {
         team.rank = index + 1;
@@ -166,8 +197,8 @@ function Home(){
         <div className="col-start-2 col-span-14"> 
 
           <div className="flex flex-col items-center justify-center mt-10 mb-6">
-            <h1 className="text-4xl font-bold mb-2">Wilson Playoff Fantasy Football</h1>
-            <p className="text-lg">WildCard Round : Week 1</p>
+            <h1 className="text-4xl font-bold mb-2">Playoff Fantasy Football</h1>
+            <p className="text-lg">{currentRound.name} Round : Week {currentRound.week}</p>
           </div>
 
         <div className="overflow-x-auto ">

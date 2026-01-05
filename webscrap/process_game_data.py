@@ -2,10 +2,20 @@
 import json
 import os
 import sys
-import math
+import re
 from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from scoring_helpers import (
+    calculate_fantasy_points,
+    calculate_defense_points,
+    calculate_sb_winner_points,
+    calculate_team_totals_and_ranks,
+    get_multiplier,
+    is_bye_team,
+    normalize_team_name,
+    WEEK_INDEX_MAP
+)
 
 # Load environment variables from parent directory
 env_path = Path(__file__).parent.parent / '.env'
@@ -26,163 +36,67 @@ if not supabase_url or not supabase_key:
 
 supabase: Client = create_client(supabase_url, supabase_key)
 
-# Week to array index mapping
-# 0 = Wildcard, 1 = Divisional, 2 = Conference, 3 = Super Bowl
-WEEK_INDEX_MAP = {
-    "Wildcard": 0,
-    "WildCard": 0,
-    "Divisional": 1,
-    "Conference": 2,
-    "Super Bowl": 3,
-    "SuperBowl": 3,
-}
+# Note: WEEK_INDEX_MAP is imported from scoring_helpers
 
-# Special player name mappings (same as JS version)
-SPECIAL_PLAYER_NAME_MAPPINGS = {
+# Canonical name mappings - same as JavaScript
+# Maps any variant to the canonical database name
+CANONICAL_NAME_MAPPINGS = {
+    # Suffix variations
+    'brian thomas': 'brian thomas jr',
+    'travis etienne': 'travis etienne jr',
+    'luther burden iii': 'luther burden',
+    'luther burden': 'luther burden',
+    
+    # Dot/period variations
+    'a.j. brown': 'aj brown',
+    'aj brown': 'aj brown',
+    'c.j. stroud': 'cj stroud',
+    'cj stroud': 'cj stroud',
+    
+    # Existing mappings
     'jsn': 'jaxon smith-njigba',
     'cmc': 'christian mccaffrey',
+    'andres borregales': 'andy borregales',
 }
 
+def create_matchable_name(name):
+    """Create matchable name (strips suffixes and dots for comparison)"""
+    if not name:
+        return ''
+    
+    matchable = name.lower().strip()
+    
+    # Strip periods from initials
+    matchable = matchable.replace('.', '')
+    
+    # Strip common suffixes for matching
+    matchable = re.sub(r'\s+(jr|sr|iii|ii|iv|v)$', '', matchable, flags=re.IGNORECASE)
+    
+    # Normalize spaces and hyphens
+    matchable = matchable.replace('-', ' ').replace('  ', ' ').strip()
+    
+    return matchable
+
 def normalize_player_name(name):
-    """Normalize player name for matching (same logic as JS)"""
+    """Normalize player name for matching and get canonical name"""
     if not name:
         return ''
     
     lower_name = name.lower().strip()
     
-    # Check special cases first
-    if lower_name in SPECIAL_PLAYER_NAME_MAPPINGS:
-        return SPECIAL_PLAYER_NAME_MAPPINGS[lower_name]
+    # Check canonical mappings first
+    if lower_name in CANONICAL_NAME_MAPPINGS:
+        return CANONICAL_NAME_MAPPINGS[lower_name]
     
-    # Normalize: lowercase, replace hyphens with spaces, normalize multiple spaces
-    normalized = lower_name.replace('-', ' ').replace('  ', ' ').strip()
-    return normalized
+    # Create matchable version and check if it maps to canonical
+    matchable = create_matchable_name(name)
+    if matchable in CANONICAL_NAME_MAPPINGS:
+        return CANONICAL_NAME_MAPPINGS[matchable]
+    
+    # For storage, use matchable version
+    return matchable
 
-def parse_xp_string(xp_str):
-    """Parse XP string like '3/3' and return made attempts"""
-    if isinstance(xp_str, (int, float)):
-        return int(xp_str)
-    if isinstance(xp_str, str) and '/' in xp_str:
-        return int(xp_str.split('/')[0])
-    return 0
-
-def calculate_fantasy_points(stats, position):
-    """
-    Calculate fantasy points from stats.
-    - Floor all non-reception points to whole numbers
-    - Then add reception points (0.5 per reception)
-    - Final result: whole number or whole number + 0.5
-    
-    Scoring:
-    - Passing: 1 pt per 25 yards, 4 pts per TD, -2 per INT
-    - Rushing: 1 pt per 10 yards, 6 pts per TD
-    - Receiving: 0.5 pt per reception, 1 pt per 10 yards, 6 pts per TD
-    - Kicking: Distance-based FG (0-39: 3, 40-49: 4, 50-59: 5, 60-69: 6, 70+: 7)
-                Missed FG <40: -2, Missed FG >=40: -1
-                Made XP: +1, Missed XP: -2
-    """
-    points = 0.0
-    
-    # Passing stats (floor these)
-    if 'passing' in stats:
-        p = stats['passing']
-        points += math.floor(p.get('passing_yards', 0) / 25.0)
-        points += (p.get('passing_tds', 0) * 4)  # Already whole
-        points += (p.get('interceptions', 0) * -2)  # Already whole
-    
-    # Rushing stats (floor these)
-    if 'rushing' in stats:
-        r = stats['rushing']
-        points += math.floor(r.get('rushing_yards', 0) / 10.0)
-        points += (r.get('rushing_tds', 0) * 6)  # Already whole
-    
-    # Receiving stats - yards and TDs (floor these), receptions added separately
-    reception_points = 0.0
-    if 'receiving' in stats:
-        rec = stats['receiving']
-        points += math.floor(rec.get('receiving_yards', 0) / 10.0)
-        points += (rec.get('receiving_tds', 0) * 6)  # Already whole
-        # Receptions added separately (not floored)
-        reception_points = rec.get('receptions', 0) * 0.5
-    
-    # Kicking stats (all whole numbers)
-    if 'kicking' in stats:
-        k = stats['kicking']
-        
-        # Process field goals from array (distance-based scoring)
-        field_goals = k.get('field_goals', [])
-        if field_goals:
-            for fg in field_goals:
-                distance = fg.get('distance', 0)
-                made = fg.get('made', False)
-                
-                if made:
-                    # Made FGs: 0-39: 3, 40-49: 4, 50-59: 5, 60-69: 6, 70+: 7
-                    if distance <= 39:
-                        points += 3
-                    elif distance <= 49:
-                        points += 4
-                    elif distance <= 59:
-                        points += 5
-                    elif distance <= 69:
-                        points += 6
-                    else:  # 70+
-                        points += 7
-                else:
-                    # Missed/Blocked FGs
-                    if distance < 40:
-                        points += -2  # Under 39yds: -2
-                    else:
-                        points += -1  # Over 40yds: -1
-        
-        # Process extra points
-        xp_str = k.get('xp_made', 0)
-        if isinstance(xp_str, str) and '/' in xp_str:
-            parts = xp_str.split('/')
-            xp_made = int(parts[0])
-            xp_att = int(parts[1])
-            points += xp_made * 1  # Made XP: +1 each
-            points += (xp_att - xp_made) * -2  # Missed XP: -2 each
-        elif isinstance(xp_str, (int, float)):
-            points += int(xp_str) * 1
-    
-    # Add reception points last (not floored, always 0.5 increments)
-    points += reception_points
-    
-    return points  # Result: whole number or whole + 0.5
-
-def calculate_defense_points(def_stats):
-    """
-    Calculate defense fantasy points.
-    Standard scoring - customize as needed:
-    - Points allowed: 0 pts = 10, 1-6 = 7, 7-13 = 4, 14-20 = 1, 21-34 = 0, 35+ = -2
-    - Sacks: 1 pt each
-    - Interceptions: 2 pts each
-    - Fumble recoveries: 2 pts each
-    - Defensive TDs: 6 pts each
-    """
-    points = 0.0
-    
-    points_allowed = def_stats.get('points_allowed', 0)
-    if points_allowed == 0:
-        points += 10
-    elif points_allowed <= 6:
-        points += 7
-    elif points_allowed <= 13:
-        points += 4
-    elif points_allowed <= 20:
-        points += 1
-    elif points_allowed <= 34:
-        points += 0
-    else:
-        points += -2
-    
-    points += def_stats.get('sacks', 0) * 1
-    points += def_stats.get('interceptions', 0) * 2
-    points += def_stats.get('fumbles_recovered', 0) * 2
-    points += def_stats.get('defensive_tds', 0) * 6
-    
-    return round(points, 2)
+# Note: calculate_fantasy_points and calculate_defense_points are imported from scoring_helpers
 
 def determine_winner(score, teams):
     """Determine which team won based on score"""
@@ -233,6 +147,23 @@ def process_game_file(game_file_path, week_name):
         print(f"❌ Error loading players from database: {e}")
         return False
     
+    # Get all sbWinner player IDs (for special handling)
+    try:
+        fantasy_teams_for_sb = supabase.table('fantasy_teams').select('players').execute()
+        sb_winner_ids = set()
+        for team in (fantasy_teams_for_sb.data or []):
+            players_json = team['players']
+            if isinstance(players_json, str):
+                players_json = json.loads(players_json)
+                if isinstance(players_json, str):
+                    players_json = json.loads(players_json)
+            sb_winner_id = players_json.get('sbWinner')
+            if sb_winner_id:
+                sb_winner_ids.add(sb_winner_id)
+    except Exception as e:
+        print(f"⚠️  Error fetching sbWinner IDs: {e}")
+        sb_winner_ids = set()
+    
     # Create normalized name map for quick lookup
     player_map = {}
     for player in all_players:
@@ -272,15 +203,11 @@ def process_game_file(game_file_path, week_name):
         # Use first match (or you could add logic to match by team/position if multiple)
         matched_player = matched_players[0]
         
-        # Calculate fantasy points
+        # Calculate BASE fantasy points (before multiplier)
         stats = player_data.get('stats', {})
-        points = calculate_fantasy_points(stats, player_data.get('position', ''))
+        base_points = calculate_fantasy_points(stats, player_data.get('position', ''))
         
-        # Check if player's team won
-        player_team = player_data.get('team', '')
-        won = player_team == winner if winner else None
-        
-        # Get current points and won arrays
+        # Get current points and won arrays for multiplier calculation
         current_points = matched_player.get('points', [None, None, None, None])
         current_won = matched_player.get('won', [None, None, None, None])
         
@@ -290,8 +217,18 @@ def process_game_file(game_file_path, week_name):
         while len(current_won) < 4:
             current_won.append(None)
         
+        # Get multiplier based on team (bye team or not)
+        player_team = player_data.get('team', '')
+        multiplier = get_multiplier(player_team, week_index, current_points, current_won)
+        
+        # Apply multiplier to base points
+        final_points = base_points * multiplier
+        
+        # Check if player's team won
+        won = player_team == winner if winner else None
+        
         # Update the specific week index
-        current_points[week_index] = float(points) if points else None
+        current_points[week_index] = float(final_points) if final_points else None
         current_won[week_index] = won
         
         # Update player in database
@@ -302,7 +239,7 @@ def process_game_file(game_file_path, week_name):
             }).eq('id', matched_player['id']).execute()
             
             won_str = "✅" if won else "❌" if won is False else "❓"
-            print(f"✅ Updated {player_name}: {points} pts {won_str} (DB: {matched_player['name']})")
+            print(f"✅ Updated {player_name}: {base_points} (base) × {multiplier} = {final_points} pts {won_str} (DB: {matched_player['name']})")
             updated_count += 1
         except Exception as e:
             print(f"❌ Error updating {player_name}: {e}")
@@ -313,8 +250,55 @@ def process_game_file(game_file_path, week_name):
     played_player_names = {normalize_player_name(pname) for pname in game_data['players'].keys()}
     
     for db_player in all_players:
-        # Skip defense (handled separately)
+        # Skip defense (handled separately), BUT handle sbWinner here
         if db_player.get('position') == 'DEF':
+            # Check if this DEF player is an sbWinner
+            if db_player['id'] in sb_winner_ids:
+                # sbWinner: handle separately (update won status, but only points for Super Bowl)
+                db_team_normalized = normalize_player_name(db_player.get('team', ''))
+                
+                # Check if this player's team is in the game
+                if db_team_normalized in teams_in_game:
+                    current_points = db_player.get('points', [None, None, None, None])
+                    current_won = db_player.get('won', [None, None, None, None])
+                    
+                    while len(current_points) < 4:
+                        current_points.append(None)
+                    while len(current_won) < 4:
+                        current_won.append(None)
+                    
+                    # Won status based on team result (for blackout)
+                    player_team = db_player.get('team', '')
+                    won = player_team == winner if winner else None
+                    
+                    # Only set points if it's Super Bowl (week_index == 3)
+                    # Otherwise leave as None (don't score until Super Bowl)
+                    if week_index == 3:
+                        # Super Bowl: calculate SB Winner points ONLY if this player's team won
+                        if won:  # Only give points if their team won
+                            sb_points = calculate_sb_winner_points(winner) if winner else None
+                            current_points[week_index] = float(sb_points) if sb_points else None
+                        else:
+                            # Team lost - set to 0 points
+                            current_points[week_index] = 0.0
+                    
+                    current_won[week_index] = won
+                    
+                    try:
+                        supabase.table('players').update({
+                            'points': current_points,
+                            'won': current_won
+                        }).eq('id', db_player['id']).execute()
+                        
+                        won_str = "✅" if won else "❌" if won is False else "❓"
+                        if week_index == 3:
+                            print(f"✅ Updated sbWinner {db_player['name']} ({db_player.get('team', '')}): {current_points[week_index]} pts {won_str}")
+                        else:
+                            print(f"⚠️  Updated sbWinner {db_player['name']} ({db_player.get('team', '')}): won={won_str} (no points until Super Bowl)")
+                        updated_count += 1
+                    except Exception as e:
+                        print(f"❌ Error updating sbWinner {db_player['name']}: {e}")
+            # If it's DEF but not sbWinner, skip (handled in defense section)
             continue
         
         db_team_normalized = normalize_player_name(db_player.get('team', ''))
@@ -325,33 +309,73 @@ def process_game_file(game_file_path, week_name):
             db_name_normalized = normalize_player_name(db_player['name'])
             
             if db_name_normalized not in played_player_names:
-                # Player is on a team in the game but didn't play - set to 0 points
-                current_points = db_player.get('points', [None, None, None, None])
-                current_won = db_player.get('won', [None, None, None, None])
-                
-                while len(current_points) < 4:
-                    current_points.append(None)
-                while len(current_won) < 4:
-                    current_won.append(None)
-                
-                # Set to 0 points for this week
-                current_points[week_index] = 0.0
-                # Won status based on team result
-                player_team = db_player.get('team', '')
-                won = player_team == winner if winner else None
-                current_won[week_index] = won
-                
-                try:
-                    supabase.table('players').update({
-                        'points': current_points,
-                        'won': current_won
-                    }).eq('id', db_player['id']).execute()
+                # Check if this is an sbWinner player for Super Bowl
+                if db_player['id'] in sb_winner_ids and week_index == 3:
+                    # sbWinner in Super Bowl: give points if team won, 0 if lost
+                    current_points = db_player.get('points', [None, None, None, None])
+                    current_won = db_player.get('won', [None, None, None, None])
                     
-                    won_str = "✅" if won else "❌" if won is False else "❓"
-                    print(f"⚠️  Set {db_player['name']} ({db_player.get('team', '')}) to 0 pts {won_str} (didn't play)")
-                    updated_count += 1
-                except Exception as e:
-                    print(f"❌ Error updating {db_player['name']}: {e}")
+                    while len(current_points) < 4:
+                        current_points.append(None)
+                    while len(current_won) < 4:
+                        current_won.append(None)
+                    
+                    # Won status based on team result
+                    player_team = db_player.get('team', '')
+                    won = player_team == winner if winner else None
+                    
+                    # Super Bowl: calculate SB Winner points ONLY if this player's team won
+                    if won:  # Only give points if their team won
+                        sb_points = calculate_sb_winner_points(winner) if winner else None
+                        current_points[week_index] = float(sb_points) if sb_points else None
+                    else:
+                        # Team lost - set to 0 points
+                        current_points[week_index] = 0.0
+                    
+                    current_won[week_index] = won
+                    
+                    try:
+                        supabase.table('players').update({
+                            'points': current_points,
+                            'won': current_won
+                        }).eq('id', db_player['id']).execute()
+                        
+                        won_str = "✅" if won else "❌" if won is False else "❓"
+                        print(f"✅ Updated sbWinner {db_player['name']} ({db_player.get('team', '')}): {current_points[week_index]} pts {won_str}")
+                        updated_count += 1
+                    except Exception as e:
+                        print(f"❌ Error updating sbWinner {db_player['name']}: {e}")
+                else:
+                    # Regular player who didn't play - set to 0 points
+                    current_points = db_player.get('points', [None, None, None, None])
+                    current_won = db_player.get('won', [None, None, None, None])
+                    
+                    while len(current_points) < 4:
+                        current_points.append(None)
+                    while len(current_won) < 4:
+                        current_won.append(None)
+                    
+                    # Get multiplier for 0 points (multiplier still applies even if 0)
+                    player_team = db_player.get('team', '')
+                    multiplier = get_multiplier(player_team, week_index, current_points, current_won)
+                    
+                    # Set to 0 points for this week (0 × multiplier = 0, but we track it)
+                    current_points[week_index] = 0.0
+                    # Won status based on team result
+                    won = player_team == winner if winner else None
+                    current_won[week_index] = won
+                    
+                    try:
+                        supabase.table('players').update({
+                            'points': current_points,
+                            'won': current_won
+                        }).eq('id', db_player['id']).execute()
+                        
+                        won_str = "✅" if won else "❌" if won is False else "❓"
+                        print(f"⚠️  Set {db_player['name']} ({db_player.get('team', '')}) to 0 pts {won_str} (didn't play)")
+                        updated_count += 1
+                    except Exception as e:
+                        print(f"❌ Error updating {db_player['name']}: {e}")
     
     # Process defense stats
     print(f"\n🛡️  Processing defense stats...")
@@ -362,11 +386,14 @@ def process_game_file(game_file_path, week_name):
         found = False
         for db_player in all_players:
             if db_player.get('position') == 'DEF':
+                # Skip sbWinner players (they're handled separately)
+                if db_player['id'] in sb_winner_ids:
+                    continue
+                
                 db_team_normalized = normalize_player_name(db_player.get('team', ''))
                 if db_team_normalized == normalized_team:
-                    # Calculate defense points
-                    def_points = calculate_defense_points(defense_stats)
-                    won = team_name == winner if winner else None
+                    # Calculate BASE defense points (before multiplier)
+                    base_def_points = calculate_defense_points(defense_stats)
                     
                     current_points = db_player.get('points', [None, None, None, None])
                     current_won = db_player.get('won', [None, None, None, None])
@@ -376,7 +403,13 @@ def process_game_file(game_file_path, week_name):
                     while len(current_won) < 4:
                         current_won.append(None)
                     
-                    current_points[week_index] = float(def_points) if def_points else None
+                    # Get multiplier and apply it
+                    multiplier = get_multiplier(team_name, week_index, current_points, current_won)
+                    final_def_points = base_def_points * multiplier
+                    
+                    won = team_name == winner if winner else None
+                    
+                    current_points[week_index] = float(final_def_points) if final_def_points else None
                     current_won[week_index] = won
                     
                     try:
@@ -386,7 +419,7 @@ def process_game_file(game_file_path, week_name):
                         }).eq('id', db_player['id']).execute()
                         
                         won_str = "✅" if won else "❌" if won is False else "❓"
-                        print(f"✅ Updated {team_name} Defense: {def_points} pts {won_str}")
+                        print(f"✅ Updated {team_name} Defense: {base_def_points} (base) × {multiplier} = {final_def_points} pts {won_str}")
                         updated_count += 1
                         found = True
                         break
@@ -395,6 +428,9 @@ def process_game_file(game_file_path, week_name):
         
         if not found:
             print(f"⚠️  Defense not found in database: {team_name}")
+    
+    # After all player points are updated, calculate and update fantasy team totals and ranks
+    calculate_team_totals_and_ranks(supabase)
     
     print(f"\n{'='*60}")
     print(f"✅ Processing complete! Updated {updated_count} players")
