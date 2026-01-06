@@ -5,6 +5,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import subprocess
 import os
+import glob
+import sys
 
 # Path to your existing game scraper script
 GAME_SCRAPER_SCRIPT = "scrape_game.py"
@@ -191,6 +193,47 @@ def get_week_folder(year: int, week: int, season_type: int):
     os.makedirs(folder, exist_ok=True)
     return folder
 
+def process_all_games_in_folder(folder_path: str, week: int, season_type: int):
+    """Process all game JSON files in a folder using process_game_data.py"""
+    # Map week number to week name for process_game_data
+    week_name_map = {
+        1: "Wildcard",
+        2: "Divisional", 
+        3: "Conference",
+        5: "SuperBowl"  # Week 5 on ESPN = Super Bowl
+    }
+    
+    if week not in week_name_map:
+        print(f"⚠️  No week name mapping for week {week}")
+        return
+    
+    week_name = week_name_map[week]
+    
+    # Find all JSON game files in the folder
+    game_files = glob.glob(os.path.join(folder_path, "game_*.json"))
+    
+    if not game_files:
+        print(f"⚠️  No game files found in {folder_path}")
+        return
+    
+    print(f"\n🔄 Processing {len(game_files)} game files...")
+    
+    # Process each game file
+    for game_file in sorted(game_files):
+        print(f"\n{'='*60}")
+        print(f"Processing: {os.path.basename(game_file)}")
+        result = subprocess.run(
+            ["python", "process_game_data.py", game_file, week_name],
+            cwd=os.path.dirname(os.path.abspath(__file__))
+        )
+        
+        if result.returncode == 0:
+            print(f"✅ Successfully processed {os.path.basename(game_file)}")
+        else:
+            print(f"❌ Error processing {os.path.basename(game_file)}")
+    
+    print(f"\n✅ Finished processing all games for {week_name}")
+
 def scrape_all_games(links, year: int, week: int, season_type: int):
     """Scrape all games and save to week-specific folder"""
     folder = get_week_folder(year, week, season_type)
@@ -201,11 +244,29 @@ def scrape_all_games(links, year: int, week: int, season_type: int):
         # Call your existing game scraper script for this link
         # Pass the folder path as second argument
         subprocess.run(["python", GAME_SCRAPER_SCRIPT, link, folder])
+    
+    # After scraping, automatically process all games
+    print(f"\n{'='*60}")
+    print("📊 Starting automatic game processing...")
+    process_all_games_in_folder(folder, week, season_type)
 
 if __name__ == "__main__":
-    week = 5
-    year = 2024
-    season_type = 3
+    # Allow command line arguments: week, year, season_type
+    # Usage: python scrape_week.py [week] [year] [season_type]
+    if len(sys.argv) >= 2:
+        week = int(sys.argv[1])
+    else:
+        week = 2  # Default
+    
+    if len(sys.argv) >= 3:
+        year = int(sys.argv[2])
+    else:
+        year = 2025  # Default
+    
+    if len(sys.argv) >= 4:
+        season_type = int(sys.argv[3])
+    else:
+        season_type = 3  # Default (playoffs)
     
     # Skip week 4 (Pro Bowl)
     if week == 4 and season_type == 3:
