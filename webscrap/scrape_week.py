@@ -261,7 +261,7 @@ if __name__ == "__main__":
     if len(sys.argv) >= 2:
         week = int(sys.argv[1])
     else:
-        week = 2  # Default
+        week = 1  # Default
     
     if len(sys.argv) >= 3:
         year = int(sys.argv[2])
