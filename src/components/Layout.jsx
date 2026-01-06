@@ -12,8 +12,8 @@ function Layout(){
         <Outlet />
       </main>
 
-      <div>
-        <h1>Footer</h1>
+      <div className="m-5">
+        <h1>© Postseason Fantasy Football 2025</h1>
       </div>
     </div>
   )

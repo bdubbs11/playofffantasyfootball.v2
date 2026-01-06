@@ -119,7 +119,7 @@ def calculate_fantasy_points(stats, position):
     - Passing: 1 pt per 25 yards, 4 pts per TD, -2 per INT
     - Rushing: 1 pt per 10 yards, 6 pts per TD
     - Receiving: 0.5 pt per reception, 1 pt per 10 yards, 6 pts per TD
-    - Fumbles: -2 pts per fumble lost
+    - Fumbles: -2 pts per fumble lost (QB), -3 pts per fumble lost (non-QB)
     - Kicking: Distance-based FG (0-39: 3, 40-49: 4, 50-59: 5, 60-69: 6, 70+: 7)
                 Missed FG <40: -2, Missed FG >=40: -1
                 Made XP: +1, Missed XP: -2
@@ -167,10 +167,8 @@ def calculate_fantasy_points(stats, position):
                         points += 4
                     elif distance <= 59:
                         points += 5
-                    elif distance <= 69:
+                    else:
                         points += 6
-                    else:  # 70+
-                        points += 7
                 else:
                     # Missed/Blocked FGs
                     if distance < 40:
@@ -189,7 +187,7 @@ def calculate_fantasy_points(stats, position):
         elif isinstance(xp_str, (int, float)):
             points += int(xp_str) * 1
     
-    # Fumbles lost penalty: -2 points per fumble lost
+    # Fumbles lost penalty: -2 points per fumble lost (QB), -3 points per fumble lost (non-QB)
     if 'fumbles' in stats:
         f = stats['fumbles']
         # Handle both dict format {"LOST": 1, "REC": 0} and direct key format
@@ -197,7 +195,9 @@ def calculate_fantasy_points(stats, position):
             fumbles_lost = f.get('LOST', 0) or f.get('fumbles_lost', 0)
         else:
             fumbles_lost = f if isinstance(f, (int, float)) else 0
-        points += fumbles_lost * -2  # -2 points per fumble lost
+        # QB fumbles: -2 points, non-QB fumbles: -3 points
+        fumble_penalty = -2 if position == "QB" else -3
+        points += fumbles_lost * fumble_penalty
     
     # Add reception points last (not floored, always 0.5 increments)
     points += reception_points

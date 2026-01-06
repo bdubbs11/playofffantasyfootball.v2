@@ -1,0 +1,78 @@
+name: Scrape Wildcard Week
+
+on:
+  schedule:
+    - cron: '0 7 * * 0' # Sunday 2 AM EST
+    - cron: '0 7 * * 1' # Monday 2 AM EST
+    - cron: '0 7 * * 2' # Tuesday 2 AM EST
+  workflow_dispatch:
+    inputs:
+      year:
+        description: 'Season year'
+        required: true
+        default: '2025'
+      force:
+        description: 'Force re-scrape even if games exist'
+        required: false
+        default: 'false'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    env:
+      WEEK: '1'
+      YEAR: ${{ github.event.inputs.year || '2025' }}
+      FORCE: ${{ github.event.inputs.force || 'false' }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if already scraped
+        id: check_exists
+        run: |
+          FOLDER="webscrap/scraped_data/$YEAR/Week_1_WildCard"
+          if [ "$FORCE" != "true" ] && [ -d "$FOLDER" ] && [ "$(ls -A $FOLDER/*.json 2>/dev/null)" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Games already exist in $FOLDER, skipping scrape"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Python
+        if: steps.check_exists.outputs.exists != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Chrome and ChromeDriver
+        if: steps.check_exists.outputs.exists != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1)
+          wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}/chromedriver_linux64.zip"
+          sudo unzip /tmp/chromedriver.zip -d /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
+
+      - name: Install dependencies
+        if: steps.check_exists.outputs.exists != 'true'
+        run: |
+          pip install -r webscrap/requirements.txt
+
+      - name: Run weekly scraper (includes automatic processing)
+        if: steps.check_exists.outputs.exists != 'true'
+        run: |
+          cd webscrap
+          python scrape_week.py $WEEK $YEAR 3
+
+      - name: Commit scraped JSON (if changed)
+        if: steps.check_exists.outputs.exists != 'true'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add webscrap/scraped_data/
+          git diff --cached --quiet || git commit -m "Scraped NFL week $WEEK data [skip ci]"
+          git push
+

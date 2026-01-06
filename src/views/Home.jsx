@@ -197,7 +197,7 @@ function Home(){
         <div className="col-start-2 col-span-14"> 
 
           <div className="flex flex-col items-center justify-center mt-10 mb-6">
-            <h1 className="text-4xl font-bold mb-2">Playoff Fantasy Football</h1>
+            <h1 className="text-4xl font-bold mb-2">Postseason Fantasy Football</h1>
             <p className="text-lg">{currentRound.name} Round : Week {currentRound.week}</p>
           </div>
 

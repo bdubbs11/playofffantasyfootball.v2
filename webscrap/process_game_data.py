@@ -22,15 +22,16 @@ env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 # Initialize Supabase client
-# Using VITE_ prefixed variables from your .env file
-supabase_url = os.getenv("VITE_SUPABASE_URL")
-supabase_key = os.getenv("VITE_SUPABASE_ANON_KEY")
+# Prefer service role key for server-side automation (GitHub Actions)
+# Fall back to anon key for local development
+supabase_url = os.getenv("VITE_SUPABASE_URL") or os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY")
 
-# Note: For production, consider using SUPABASE_SERVICE_ROLE_KEY instead of anon key
-# The anon key will work but has RLS restrictions. Service role key bypasses RLS.
+# Note: Service role key bypasses RLS and is for trusted server-side execution
+# Anon key is for client-side use with RLS restrictions
 
 if not supabase_url or not supabase_key:
-    print("Error: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set in .env file")
+    print("Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or VITE_SUPABASE_ANON_KEY) must be set")
     print(f"Looking for .env at: {env_path}")
     sys.exit(1)
 
@@ -205,7 +206,9 @@ def process_game_file(game_file_path, week_name):
         
         # Calculate BASE fantasy points (before multiplier)
         stats = player_data.get('stats', {})
-        base_points = calculate_fantasy_points(stats, player_data.get('position', ''))
+        # Use position from database (authoritative source) for scoring calculations
+        player_position = matched_player.get('position', '')
+        base_points = calculate_fantasy_points(stats, player_position)
         
         # Get current points and won arrays for multiplier calculation
         current_points = matched_player.get('points', [None, None, None, None])
