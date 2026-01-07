@@ -3,6 +3,8 @@ import './assets/tailwindcss.css';
 import Layout from './components/Layout';
 import Home from './views/Home';  
 import EnterTeam from './views/EnterTeam';
+import NotFound from './views/404';
+
 function App() {
 
   return (
@@ -11,6 +13,7 @@ function App() {
         <Route element={<Layout />}> 
           <Route path="/" element={<Home />} />
           <Route path="/enter-team" element={<EnterTeam />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
     </BrowserRouter>

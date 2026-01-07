@@ -45,15 +45,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Chrome and ChromeDriver
+      - name: Install Chrome
         if: steps.check_exists.outputs.exists != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
-          CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1)
-          wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}/chromedriver_linux64.zip"
-          sudo unzip /tmp/chromedriver.zip -d /usr/local/bin/
-          sudo chmod +x /usr/local/bin/chromedriver
 
       - name: Install dependencies
         if: steps.check_exists.outputs.exists != 'true'
