@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import { teamSeeds } from '../components/teamseeds';
+import { teamSeeds } from '../components/teamSeeds';
 import { validateTeam } from '../components/TeamValidator';
 import { useNavigate } from 'react-router-dom';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { teamSeeds } from './teamseeds';
+import { teamSeeds } from './teamSeeds';
 
 /**
  * Validates a fantasy team against all rules
