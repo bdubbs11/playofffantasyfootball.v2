@@ -6,10 +6,41 @@ function Home(){
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentRound, setCurrentRound] = useState({ name: 'Wildcard', week: 1 });
+  const [timeUntilReveal, setTimeUntilReveal] = useState(null);
+  const [canViewTeams, setCanViewTeams] = useState(false);
+
+  // Set reveal date: Friday, January 9th, 2026 at 5pm EST
+  const REVEAL_DATE = new Date('2026-01-09T17:00:00-05:00'); // EST timezone
 
   useEffect(() => {
-    fetchTeams();
+    checkRevealTime();
+    const interval = setInterval(checkRevealTime, 1000); // Update every second
+    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (canViewTeams) {
+      fetchTeams();
+    }
+  }, [canViewTeams]);
+
+  const checkRevealTime = () => {
+    const now = new Date();
+    const timeDiff = REVEAL_DATE - now;
+    
+    if (timeDiff <= 0) {
+      setCanViewTeams(true);
+      setTimeUntilReveal(null);
+    } else {
+      setCanViewTeams(false);
+      // Calculate time remaining
+      const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+      setTimeUntilReveal({ days, hours, minutes, seconds });
+    }
+  };
 
   const fetchTeams = async () => {
     try {
@@ -191,52 +222,148 @@ function Home(){
     }
   };
 
+  // Helper function to capitalize names for display
+  const capitalizeName = (name) => {
+    if (!name) return '';
+    return name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  // Helper component for mobile player cards
+  const TeamPlayerCard = ({ player, label }) => {
+    const getPlayerBoxClassName = (player) => {
+      const baseClasses = "rounded p-2 text-center";
+      if (player.isEliminated) {
+        return `${baseClasses} bg-black`;
+      }
+      return `${baseClasses} bg-slate-700`;
+    };
+
+    const totalPoints = [player.points.wildcard, player.points.divisional, player.points.conference, player.points.superBowl]
+      .filter(p => p !== null && p !== undefined)
+      .reduce((sum, p) => sum + p, 0);
+
+    return (
+      <div className={getPlayerBoxClassName(player)}>
+        <div className="text-xs text-slate-400 mb-1">{label}</div>
+        <div className="text-sm text-white font-semibold">{capitalizeName(player.name)}</div>
+        <div className="text-xs text-slate-300 mt-1">
+          Total: {totalPoints}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-screen">
-      <div className="container grid grid-cols-1 md:grid-cols-16 mx-auto "> 
-        <div className="col-start-2 col-span-14"> 
-
-          <div className="flex flex-col items-center justify-center mt-10 mb-6">
-            <h1 className="text-4xl font-bold mb-2">Postseason Fantasy Football</h1>
-            <p className="text-lg">{currentRound.name} Round : Week {currentRound.week}</p>
-          </div>
-
-        <div className="overflow-x-auto ">
-          <div className="min-w-max">
-            {/* Header Row */}
-            <div 
-              className="grid gap-2 mb-2 px-2 text-slate-300"
-              style={{ gridTemplateColumns: '200px repeat(12, minmax(100px, 1fr))' }}
-            >
-              <div className="text-center">Team Info</div>
-              <div className="text-center">QB1</div>
-              <div className="text-center">QB2</div>
-              <div className="text-center">WR</div>
-              <div className="text-center">RB</div>
-              <div className="text-center">TE</div>
-              <div className="text-center">Flex 1</div>
-              <div className="text-center">Flex 2</div>
-              <div className="text-center">Flex 3</div>
-              <div className="text-center">Flex 4</div>
-              <div className="text-center">K</div>
-              <div className="text-center">DEF</div>
-              <div className="text-center">SB Winner</div>
-              
-            </div>
-            {/* Team Rows */}
-            {loading ? (
-              <div className="text-white text-center py-8">Loading teams...</div>
-            ) : teams.length > 0 ? (
-              teams.map((team) => (
-                <TeamRow key={team.rank} team={team} />
-              ))
-            ) : (
-              <div className="text-white text-center py-8">No teams found. Be the first to submit a team!</div>
-            )}
-            </div>
-          </div>
-
+      <div className="container mx-auto px-4 w-full"> 
+        <div className="flex flex-col items-center justify-center mt-10 mb-6">
+          <h1 className="text-4xl font-bold mb-2 text-white">Postseason Fantasy Football</h1>
+          {canViewTeams && (
+            <p className="text-lg text-white">{currentRound.name} Round : Week {currentRound.week}</p>
+          )}
         </div>
+
+        {!canViewTeams ? (
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-white">
+            <h2 className="text-3xl font-bold mb-6 text-center">Teams will be revealed on</h2>
+            <p className="text-xl mb-8 text-center">Friday, January 9th, 2026 at 5:00 PM EST</p>
+            {timeUntilReveal && (
+              <div className="grid grid-cols-4 gap-4 text-center max-w-md w-full">
+                <div className="bg-slate-700 rounded-lg p-4">
+                  <div className="text-4xl font-bold text-sky-400">{timeUntilReveal.days}</div>
+                  <div className="text-sm text-slate-300 mt-2">Days</div>
+                </div>
+                <div className="bg-slate-700 rounded-lg p-4">
+                  <div className="text-4xl font-bold text-sky-400">{timeUntilReveal.hours}</div>
+                  <div className="text-sm text-slate-300 mt-2">Hours</div>
+                </div>
+                <div className="bg-slate-700 rounded-lg p-4">
+                  <div className="text-4xl font-bold text-sky-400">{timeUntilReveal.minutes}</div>
+                  <div className="text-sm text-slate-300 mt-2">Minutes</div>
+                </div>
+                <div className="bg-slate-700 rounded-lg p-4">
+                  <div className="text-4xl font-bold text-sky-400">{timeUntilReveal.seconds}</div>
+                  <div className="text-sm text-slate-300 mt-2">Seconds</div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* Desktop: Horizontal scroll table */}
+            <div className="hidden md:block overflow-x-auto">
+              <div className="min-w-max">
+                {/* Header Row */}
+                <div 
+                  className="grid gap-2 mb-2 px-2 text-slate-300"
+                  style={{ gridTemplateColumns: '200px repeat(12, minmax(100px, 1fr))' }}
+                >
+                  <div className="text-center">Team Info</div>
+                  <div className="text-center">QB1</div>
+                  <div className="text-center">QB2</div>
+                  <div className="text-center">WR</div>
+                  <div className="text-center">RB</div>
+                  <div className="text-center">TE</div>
+                  <div className="text-center">Flex 1</div>
+                  <div className="text-center">Flex 2</div>
+                  <div className="text-center">Flex 3</div>
+                  <div className="text-center">Flex 4</div>
+                  <div className="text-center">K</div>
+                  <div className="text-center">DEF</div>
+                  <div className="text-center">SB Winner</div>
+                </div>
+                {/* Team Rows */}
+                {loading ? (
+                  <div className="text-white text-center py-8">Loading teams...</div>
+                ) : teams.length > 0 ? (
+                  teams.map((team) => (
+                    <TeamRow key={team.rank} team={team} />
+                  ))
+                ) : (
+                  <div className="text-white text-center py-8">No teams found. Be the first to submit a team!</div>
+                )}
+              </div>
+            </div>
+
+            {/* Mobile: Card-based layout */}
+            <div className="md:hidden space-y-4">
+              {loading ? (
+                <div className="text-white text-center py-8">Loading teams...</div>
+              ) : teams.length > 0 ? (
+                teams.map((team) => (
+                  <div key={team.rank} className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                    <div className="text-center mb-4">
+                      <div className="text-2xl font-bold text-white">#{team.rank}</div>
+                      <div className="text-lg text-white font-semibold">{capitalizeName(team.teamName)}</div>
+                      <div className="text-sm text-slate-400">{capitalizeName(team.ownerName)}</div>
+                      <div className="text-xl font-bold text-emerald-400 mt-2">{team.totalPoints} pts</div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Mobile: Show key players in a 2-column grid */}
+                      <TeamPlayerCard player={team.qb1} label="QB1" />
+                      <TeamPlayerCard player={team.qb2} label="QB2" />
+                      <TeamPlayerCard player={team.wr} label="WR" />
+                      <TeamPlayerCard player={team.rb} label="RB" />
+                      <TeamPlayerCard player={team.te} label="TE" />
+                      <TeamPlayerCard player={team.flex1} label="Flex 1" />
+                      <TeamPlayerCard player={team.flex2} label="Flex 2" />
+                      <TeamPlayerCard player={team.flex3} label="Flex 3" />
+                      <TeamPlayerCard player={team.flex4} label="Flex 4" />
+                      <TeamPlayerCard player={team.k} label="K" />
+                      <TeamPlayerCard player={team.def} label="DEF" />
+                      <TeamPlayerCard player={team.sbWinner} label="SB Winner" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-white text-center py-8">No teams found. Be the first to submit a team!</div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

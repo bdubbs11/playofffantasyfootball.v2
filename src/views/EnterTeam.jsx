@@ -179,6 +179,7 @@ function EnterTeam(){
   const [email, setEmail] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handleInputChange = (name, value) => {
     setFormData(prev => ({
@@ -437,11 +438,11 @@ function EnterTeam(){
         throw updateError;
       }
 
-      // Reset form and navigate to home
+      // Reset form and show success modal
       setFormData(initialFormData);
       setModalOpen(false);
       setIsSubmitting(false);
-      navigate('/');
+      setShowSuccessModal(true);
 
     } catch (err) {
       console.error(err);
@@ -461,7 +462,7 @@ function EnterTeam(){
         value={formData[name] || ''}
         onChange={(e) => handleInputChange(name, e.target.value)}
         required={required}
-        className={`border-2 border-gray-400 rounded-md px-3 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all ${fullWidth ? 'flex-1' : ''}`}
+        className={`border-2 border-gray-400 rounded-md px-3 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all w-full md:w-auto ${fullWidth ? 'flex-1' : ''}`}
       >
         <option value="" disabled>Team</option>
         <optgroup label="AFC">
@@ -486,7 +487,7 @@ function EnterTeam(){
       value={formData[name] || ''}
       onChange={(e) => handleInputChange(name, e.target.value)}
       required={required}
-      className="border-2 border-gray-400 rounded-md px-3 py-3 bg-white text-gray-800"
+      className="border-2 border-gray-400 rounded-md px-3 py-3 bg-white text-gray-800 w-full md:w-auto"
     >
       <option value="" disabled>Pos</option>
       <option value="RB">RB</option>
@@ -498,16 +499,15 @@ function EnterTeam(){
   return (
     <>
     <div className="flex flex-col flex-1 min-h-screen">
-    <div className="container grid grid-cols-1 md:grid-cols-16 mx-auto "> 
-      <div className="col-start-2 col-span-14"> 
-        <div className="flex flex-col items-center justify-center mt-10 mb-6">
-            <h1 className="text-4xl font-bold mb-8 text-white">Enter Team</h1>
+    <div className="container mx-auto px-4 w-full"> 
+      <div className="flex flex-col items-center justify-center mt-10 mb-6">
+          <h1 className="text-2xl md:text-4xl font-bold mb-8 text-white">Enter Team</h1>
 
-          {/* form for entering team */}
-            <form className="w-full max-w-6xl" onSubmit={handleSubmit}>
-              <div className="bg-gray-200 rounded-lg p-8 shadow-lg">
-                {/* Owner and Team Name Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        {/* form for entering team */}
+          <form className="w-full max-w-6xl" onSubmit={handleSubmit}>
+            <div className="bg-gray-200 rounded-lg p-4 md:p-8 shadow-lg">
+              {/* Owner and Team Name Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                   <div className="flex flex-col">
                     <label htmlFor="your-name" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide"> Your Name </label>
                     <input type="text" id="your-name" name="your-name" value={formData.yourName} onChange={(e) => handleInputChange('yourName', e.target.value)} required className="border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Enter your name" />
@@ -520,47 +520,47 @@ function EnterTeam(){
 
                 {/* Player Positions Section */}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col">
-                    <label htmlFor="qb1" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">QB1</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="qb1" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">QB1</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="qb1" name="qb1" value={formData.qb1} onChange={(e) => handleInputChange('qb1', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <TeamSelect name="qb1-team" id="qb1-team" required />
                     </div>
                   </div>
                   <div className="flex flex-col">
-                    <label htmlFor="qb2" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">QB2</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="qb2" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">QB2</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="qb2" name="qb2" value={formData.qb2} onChange={(e) => handleInputChange('qb2', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <TeamSelect name="qb2-team" id="qb2-team" required />
                     </div>
                   </div>
 
                   <div className="flex flex-col">
-                    <label htmlFor="wr" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">WR</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="wr" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">WR</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="wr" name="wr" value={formData.wr} onChange={(e) => handleInputChange('wr', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <TeamSelect name="wr-team" id="wr-team" required />
                     </div>
                   </div>
                   <div className="flex flex-col">
-                    <label htmlFor="rb" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">RB</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="rb" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">RB</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="rb" name="rb" value={formData.rb} onChange={(e) => handleInputChange('rb', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <TeamSelect name="rb-team" id="rb-team" required />
                     </div>
                   </div>
 
                   <div className="flex flex-col">
-                    <label htmlFor="te" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">TE</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="te" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">TE</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="te" name="te" value={formData.te} onChange={(e) => handleInputChange('te', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <TeamSelect name="te-team" id="te-team" required />
                     </div>
                   </div>
                   <div className="flex flex-col">
-                    <label htmlFor="flex1" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">Flex 1</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="flex1" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">Flex 1</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="flex1" name="flex1" value={formData.flex1} onChange={(e) => handleInputChange('flex1', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <FlexPositionSelect name="flex1-truepos" id="flex1-truepos" required/>
                       <TeamSelect name="flex1-team" id="flex1-team" required />
@@ -568,16 +568,16 @@ function EnterTeam(){
                   </div>
 
                   <div className="flex flex-col">
-                    <label htmlFor="flex2" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">Flex 2</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="flex2" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">Flex 2</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="flex2" name="flex2" value={formData.flex2} onChange={(e) => handleInputChange('flex2', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <FlexPositionSelect name="flex2-truepos" id="flex2-truepos" required/>
                       <TeamSelect name="flex2-team" id="flex2-team" required />
                     </div>
                   </div>
                   <div className="flex flex-col">
-                    <label htmlFor="flex3" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">Flex 3</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="flex3" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">Flex 3</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="flex3" name="flex3" value={formData.flex3} onChange={(e) => handleInputChange('flex3', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <FlexPositionSelect name="flex3-truepos" id="flex3-truepos" required/>
                       <TeamSelect name="flex3-team" id="flex3-team" required />
@@ -585,32 +585,30 @@ function EnterTeam(){
                   </div>
 
                   <div className="flex flex-col">
-                    <label htmlFor="flex4" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">Flex 4</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="flex4" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">Flex 4</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="flex4" name="flex4" value={formData.flex4} onChange={(e) => handleInputChange('flex4', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <FlexPositionSelect name="flex4-truepos" id="flex4-truepos" required/>
                       <TeamSelect name="flex4-team" id="flex4-team" required />
                     </div>
                   </div>
                   <div className="flex flex-col">
-                    <label htmlFor="def-team" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">Defense</label>
-                    <div className="flex flex-row gap-2">
-                      {/* <input  type="text" id="def" name="def" value={formData.def} onChange={(e) => handleInputChange('def', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/> */}
+                    <label htmlFor="def-team" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">Defense</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <TeamSelect name="def-team" id="def-team" required fullWidth />
                     </div>
                   </div>
 
                   <div className="flex flex-col">
-                    <label htmlFor="kicker" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">Kicker</label>
-                    <div className="flex flex-row gap-2">
+                    <label htmlFor="kicker" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">Kicker</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <input  type="text" id="kicker" name="kicker" value={formData.kicker} onChange={(e) => handleInputChange('kicker', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/>
                       <TeamSelect name="kicker-team" id="kicker-team" required />
                     </div>
                   </div>
                   <div className="flex flex-col">
-                    <label htmlFor="sbWinner-team" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left ml-4">SB Winner</label>
-                    <div className="flex flex-row gap-2">
-                      {/* <input  type="text" id="sbWinner" name="sbWinner" value={formData.sbWinner} onChange={(e) => handleInputChange('sbWinner', e.target.value)} required className="flex-1 border-2 border-gray-400 rounded-md px-4 py-3 bg-white text-gray-800 focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200 transition-all" placeholder="Player name"/> */}
+                    <label htmlFor="sbWinner-team" className="text-gray-700 font-semibold mb-2 text-sm uppercase tracking-wide text-left">SB Winner</label>
+                    <div className="flex flex-col md:flex-row gap-2">
                       <TeamSelect name="sbWinner-team" id="sbWinner-team" required fullWidth />
                     </div>
                   </div>
@@ -618,19 +616,18 @@ function EnterTeam(){
 
                 {/* Submit Button */}
                 <div className="mt-8 flex justify-center">
-                  <button type="submit" className="bg-sky-500 hover:bg-sky-600 text-white font-semibold py-3 px-8 rounded-md ease-in-out duration-300 shadow-md hover:shadow-lg">Submit Team</button>
+                  <button type="submit" className="bg-sky-500 hover:bg-sky-600 text-white font-semibold py-3 px-8 rounded-md ease-in-out duration-300 shadow-md hover:shadow-lg w-full md:w-auto">Submit Team</button>
               </div>
             </div>
           </form>
         </div>
-      </div>
     </div>
     </div>
 
     {/* Modal for validation */}
     {modalOpen && (
-      <div className="fixed inset-0 bg-transparent backdrop-blur-sm flex justify-center items-center z-50 h-full w-full">
-        <div className="bg-white p-6 rounded w-96 rounded-lg shadow-lg">
+      <div className="fixed inset-0 bg-transparent backdrop-blur-sm flex justify-center items-center z-50 h-full w-full p-4">
+        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
           <h2 className="text-xl font-bold mb-3">
             {canSubmit ? "Your Team Passes!" : "Rule Violations"}
           </h2>
@@ -690,12 +687,40 @@ function EnterTeam(){
               <button
                 type="button"
                 onClick={submitTeam}
-                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded ease-in-out duration-300"
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded ease-in-out duration-300 disabled:opacity-50"
               >
-                Submit
+                {isSubmitting ? 'Submitting...' : 'Submit'}
               </button>
             )}
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* Success confirmation modal */}
+    {showSuccessModal && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex justify-center items-center z-50 h-full w-full p-4">
+        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md text-center">
+          <div className="mb-4">
+            <svg className="mx-auto h-16 w-16 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold mb-4 text-gray-800">Team Submitted Successfully!</h2>
+          <p className="text-gray-700 mb-2">Your team has been saved.</p>
+          <p className="text-gray-700 font-semibold mb-6">
+            Check back Friday, January 7th at 5:00 PM EST to see everyone's teams!
+          </p>
+          <button 
+            onClick={() => {
+              setShowSuccessModal(false);
+              navigate('/');
+            }}
+            className="w-full px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-md ease-in-out duration-300"
+          >
+            OK
+          </button>
         </div>
       </div>
     )}

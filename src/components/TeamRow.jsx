@@ -56,7 +56,7 @@ function TeamRow({ team }) {
 
   return (
     <div 
-      className="grid gap-2 px-2 border border-slate-700 rounded-md p-6 mb-2"
+      className="grid gap-2 px-2 border border-slate-700 rounded-md p-6 mb-2 hidden md:grid"
       style={{ gridTemplateColumns: '200px repeat(12, minmax(100px, 1fr))' }}
     >
       {/* Combined Team Info Column */}
