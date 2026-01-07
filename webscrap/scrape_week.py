@@ -35,30 +35,47 @@ def get_box_score_links(week: int, year: int, season_type: int):
     
     # Handle case where ChromeDriverManager returns a directory instead of binary path
     if os.path.isdir(driver_path):
-        # Try common locations for the binary inside the directory
-        possible_paths = [
-            os.path.join(driver_path, 'chromedriver'),
-            os.path.join(driver_path, 'chromedriver-linux64', 'chromedriver'),
-            os.path.join(driver_path, 'chromedriver-mac-arm64', 'chromedriver'),
-            os.path.join(driver_path, 'chromedriver-mac-x64', 'chromedriver'),
-            os.path.join(driver_path, 'chromedriver-win64', 'chromedriver.exe'),
+        # The actual binary is typically in a subdirectory named chromedriver-{platform}
+        # Look for the chromedriver binary specifically (not THIRD_PARTY_NOTICES or other files)
+        platform_dirs = [
+            'chromedriver-linux64',
+            'chromedriver-mac-arm64', 
+            'chromedriver-mac-x64',
+            'chromedriver-win64'
         ]
-        for path in possible_paths:
-            if os.path.isfile(path) and os.access(path, os.X_OK):
-                driver_path = path
-                break
-        else:
-            # If none found, try to find chromedriver binary recursively
+        
+        found = False
+        for platform_dir in platform_dirs:
+            platform_path = os.path.join(driver_path, platform_dir)
+            if os.path.isdir(platform_path):
+                binary_path = os.path.join(platform_path, 'chromedriver' if platform_dir != 'chromedriver-win64' else 'chromedriver.exe')
+                if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
+                    driver_path = binary_path
+                    found = True
+                    break
+        
+        # Fallback: search for exact filename match (not substring)
+        if not found:
             for root, dirs, files in os.walk(driver_path):
                 for file in files:
-                    if file in ['chromedriver', 'chromedriver.exe']:
+                    # Only match exact filename, not files containing "chromedriver" in name
+                    if file == 'chromedriver' or file == 'chromedriver.exe':
                         full_path = os.path.join(root, file)
-                        if os.access(full_path, os.X_OK):
-                            driver_path = full_path
-                            break
-                else:
-                    continue
-                break
+                        # Verify it's actually executable and not a text file
+                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
+                            # Double-check it's not a text file by checking if it starts with binary data
+                            try:
+                                with open(full_path, 'rb') as f:
+                                    first_bytes = f.read(4)
+                                    # ELF magic number for Linux, Mach-O for macOS, or PE for Windows
+                                    if first_bytes.startswith(b'\x7fELF') or first_bytes.startswith(b'\xcf\xfa') or first_bytes.startswith(b'MZ'):
+                                        driver_path = full_path
+                                        found = True
+                                        break
+                            except:
+                                pass
+                if found:
+                    break
     
     service = Service(driver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
