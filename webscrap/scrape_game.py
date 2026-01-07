@@ -58,51 +58,21 @@ def setup_driver():
     
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
     
-    # Get chromedriver path and ensure it points to the binary, not directory
+    # webdriver-manager should return the correct ChromeDriver binary path
+    # If it returns a directory (known issue with some versions), find the binary inside
     driver_path = ChromeDriverManager().install()
     
-    # Handle case where ChromeDriverManager returns a directory instead of binary path
+    # Simple check: if it's a directory, look for the binary in the expected subdirectory
     if os.path.isdir(driver_path):
-        # The actual binary is typically in a subdirectory named chromedriver-{platform}
-        # Look for the chromedriver binary specifically (not THIRD_PARTY_NOTICES or other files)
-        platform_dirs = [
-            'chromedriver-linux64',
-            'chromedriver-mac-arm64', 
-            'chromedriver-mac-x64',
-            'chromedriver-win64'
-        ]
-        
-        found = False
-        for platform_dir in platform_dirs:
-            platform_path = os.path.join(driver_path, platform_dir)
-            if os.path.isdir(platform_path):
-                binary_path = os.path.join(platform_path, 'chromedriver' if platform_dir != 'chromedriver-win64' else 'chromedriver.exe')
+        # Find the platform-specific subdirectory
+        for item in os.listdir(driver_path):
+            item_path = os.path.join(driver_path, item)
+            if os.path.isdir(item_path) and item.startswith('chromedriver-'):
+                # The binary should be directly in this subdirectory
+                binary_name = 'chromedriver.exe' if 'win' in item else 'chromedriver'
+                binary_path = os.path.join(item_path, binary_name)
                 if os.path.isfile(binary_path) and os.access(binary_path, os.X_OK):
                     driver_path = binary_path
-                    found = True
-                    break
-        
-        # Fallback: search for exact filename match (not substring)
-        if not found:
-            for root, dirs, files in os.walk(driver_path):
-                for file in files:
-                    # Only match exact filename, not files containing "chromedriver" in name
-                    if file == 'chromedriver' or file == 'chromedriver.exe':
-                        full_path = os.path.join(root, file)
-                        # Verify it's actually executable and not a text file
-                        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-                            # Double-check it's not a text file by checking if it starts with binary data
-                            try:
-                                with open(full_path, 'rb') as f:
-                                    first_bytes = f.read(4)
-                                    # ELF magic number for Linux, Mach-O for macOS, or PE for Windows
-                                    if first_bytes.startswith(b'\x7fELF') or first_bytes.startswith(b'\xcf\xfa') or first_bytes.startswith(b'MZ'):
-                                        driver_path = full_path
-                                        found = True
-                                        break
-                            except:
-                                pass
-                if found:
                     break
     
     return webdriver.Chrome(
