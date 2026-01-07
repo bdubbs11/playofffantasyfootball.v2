@@ -17,15 +17,51 @@ GAME_SCRAPER_SCRIPT = "scrape_game.py"
 def get_box_score_links(week: int, year: int, season_type: int):
     url = f"https://www.espn.com/nfl/scoreboard/_/week/{week}/year/{year}/seasontype/{season_type}"
 
-    # Initialize browser with headless options for GitHub Actions compatibility
+    # Detect if running in GitHub Actions
+    is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
+    
+    # Initialize browser with appropriate options for environment
     chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=chrome_options
-    )
+    if is_ci:
+        # CI-specific flags for GitHub Actions
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+    # Local: use normal Chrome (visible browser)
+    
+    # Get chromedriver path and ensure it points to the binary, not directory
+    driver_path = ChromeDriverManager().install()
+    
+    # Handle case where ChromeDriverManager returns a directory instead of binary path
+    if os.path.isdir(driver_path):
+        # Try common locations for the binary inside the directory
+        possible_paths = [
+            os.path.join(driver_path, 'chromedriver'),
+            os.path.join(driver_path, 'chromedriver-linux64', 'chromedriver'),
+            os.path.join(driver_path, 'chromedriver-mac-arm64', 'chromedriver'),
+            os.path.join(driver_path, 'chromedriver-mac-x64', 'chromedriver'),
+            os.path.join(driver_path, 'chromedriver-win64', 'chromedriver.exe'),
+        ]
+        for path in possible_paths:
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                driver_path = path
+                break
+        else:
+            # If none found, try to find chromedriver binary recursively
+            for root, dirs, files in os.walk(driver_path):
+                for file in files:
+                    if file in ['chromedriver', 'chromedriver.exe']:
+                        full_path = os.path.join(root, file)
+                        if os.access(full_path, os.X_OK):
+                            driver_path = full_path
+                            break
+                else:
+                    continue
+                break
+    
+    service = Service(driver_path)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.get(url)
 
     wait = WebDriverWait(driver, 20)

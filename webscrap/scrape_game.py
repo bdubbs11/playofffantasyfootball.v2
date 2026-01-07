@@ -42,14 +42,54 @@ def get_team_abbrev(team_name):
 
 def setup_driver():
     """Initialize Chrome driver"""
+    # Detect if running in GitHub Actions
+    is_ci = os.environ.get("GITHUB_ACTIONS") == "true"
+    
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    if is_ci:
+        # CI-specific flags for GitHub Actions
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+    else:
+        # Local: optionally headless (you can remove this if you want visible browser)
+        chrome_options.add_argument("--headless")
+    
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
     
+    # Get chromedriver path and ensure it points to the binary, not directory
+    driver_path = ChromeDriverManager().install()
+    
+    # Handle case where ChromeDriverManager returns a directory instead of binary path
+    if os.path.isdir(driver_path):
+        # Try common locations for the binary inside the directory
+        possible_paths = [
+            os.path.join(driver_path, 'chromedriver'),
+            os.path.join(driver_path, 'chromedriver-linux64', 'chromedriver'),
+            os.path.join(driver_path, 'chromedriver-mac-arm64', 'chromedriver'),
+            os.path.join(driver_path, 'chromedriver-mac-x64', 'chromedriver'),
+            os.path.join(driver_path, 'chromedriver-win64', 'chromedriver.exe'),
+        ]
+        for path in possible_paths:
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                driver_path = path
+                break
+        else:
+            # If none found, try to find chromedriver binary recursively
+            for root, dirs, files in os.walk(driver_path):
+                for file in files:
+                    if file in ['chromedriver', 'chromedriver.exe']:
+                        full_path = os.path.join(root, file)
+                        if os.access(full_path, os.X_OK):
+                            driver_path = full_path
+                            break
+                else:
+                    continue
+                break
+    
     return webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
+        service=Service(driver_path),
         options=chrome_options
     )
 
