@@ -2,6 +2,41 @@ import React, { useState, useEffect } from 'react';
 import TeamRow from '../components/TeamRow';
 import { supabase } from '../lib/supabase';
 
+// Helper function to generate image paths
+const getImagePath = (name, capitalize = false) => {
+  if (!name) return 'images/placeholder.png';
+  if (capitalize) {
+    // Capitalize first letter of each word, then remove spaces
+    const capitalized = name
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join('');
+    return `images/${capitalized}.png`;
+  }
+  // Lowercase (remove spaces)
+  return `images/${name.replace(/\s+/g, '')}.png`;
+};
+
+// Helper component for images with fallback: tries lowercase, then capitalized, then placeholder
+const ImageWithFallback = ({ name, alt, className }) => {
+  const [imgSrc, setImgSrc] = useState(getImagePath(name, false)); // Start with lowercase
+  const [attempt, setAttempt] = useState(0); // 0 = lowercase, 1 = capitalized, 2 = placeholder
+
+  const handleError = () => {
+    if (attempt === 0) {
+      // Try capitalized version
+      setImgSrc(getImagePath(name, true));
+      setAttempt(1);
+    } else if (attempt === 1) {
+      // Fall back to placeholder
+      setImgSrc('images/placeholder.png');
+      setAttempt(2);
+    }
+  };
+
+  return <img src={imgSrc} alt={alt} className={className} onError={handleError} />;
+};
+
 function Home(){
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,8 +44,8 @@ function Home(){
   const [timeUntilReveal, setTimeUntilReveal] = useState(null);
   const [canViewTeams, setCanViewTeams] = useState(false);
 
-  // Set reveal date: Friday, January 9th, 2026 at 5pm EST
-  const REVEAL_DATE = new Date('2026-01-09T17:00:00-05:00'); // EST timezone
+  // Set reveal date: Friday, January 9th, 2026 at 8pm EST
+  const REVEAL_DATE = new Date('2026-01-09T20:00:00-05:00'); // EST timezone
 
   useEffect(() => {
     checkRevealTime();
@@ -248,9 +283,30 @@ function Home(){
     return (
       <div className={getPlayerBoxClassName(player)}>
         <div className="text-xs text-slate-400 mb-1">{label}</div>
-        <div className="text-sm text-white font-semibold">{capitalizeName(player.name)}</div>
-        <div className="text-xs text-slate-300 mt-1">
-          Total: {totalPoints}
+        <div className="flex justify-center mb-2">
+          <ImageWithFallback 
+            name={player.name} 
+            alt={capitalizeName(player.name)} 
+            className="w-20 h-16 object-contain" 
+          />
+        </div>
+        <div className="text-sm text-white font-semibold mb-2">{capitalizeName(player.name)}</div>
+        <div className="space-y-1">
+          <div className="text-xs text-slate-300">
+            Wildcard: {player.points.wildcard !== null && player.points.wildcard !== undefined ? player.points.wildcard : '-'}
+          </div>
+          <div className="text-xs text-slate-300">
+            Divisional: {player.points.divisional !== null && player.points.divisional !== undefined ? player.points.divisional : '-'}
+          </div>
+          <div className="text-xs text-slate-300">
+            Conference: {player.points.conference !== null && player.points.conference !== undefined ? player.points.conference : '-'}
+          </div>
+          <div className="text-xs text-slate-300">
+            Super Bowl: {player.points.superBowl !== null && player.points.superBowl !== undefined ? player.points.superBowl : '-'}
+          </div>
+          <div className="text-xs text-emerald-400 font-semibold mt-1 pt-1 border-t border-slate-600">
+            Total: {totalPoints}
+          </div>
         </div>
       </div>
     );
@@ -269,7 +325,7 @@ function Home(){
         {!canViewTeams ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-white">
             <h2 className="text-3xl font-bold mb-6 text-center">Teams will be revealed on</h2>
-            <p className="text-xl mb-8 text-center">Friday, January 9th, 2026 at 5:00 PM EST</p>
+            <p className="text-xl mb-8 text-center">Friday, January 9th, 2026 at 8:00 PM EST</p>
             {timeUntilReveal && (
               <div className="grid grid-cols-4 gap-4 text-center max-w-md w-full">
                 <div className="bg-slate-700 rounded-lg p-4">
