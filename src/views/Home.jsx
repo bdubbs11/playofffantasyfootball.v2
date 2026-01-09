@@ -45,7 +45,7 @@ function Home(){
   const [canViewTeams, setCanViewTeams] = useState(false);
 
   // Set reveal date: Friday, January 9th, 2026 at 8pm EST
-  const REVEAL_DATE = new Date('2026-01-09T20:00:00-05:00'); // EST timezone
+  const REVEAL_DATE = new Date('2026-01-09T18:30:00-05:00'); // EST timezone
 
   useEffect(() => {
     checkRevealTime();
@@ -325,7 +325,7 @@ function Home(){
         {!canViewTeams ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-white">
             <h2 className="text-3xl font-bold mb-6 text-center">Teams will be revealed on</h2>
-            <p className="text-xl mb-8 text-center">Friday, January 9th, 2026 at 8:00 PM EST</p>
+            <p className="text-xl mb-8 text-center">Friday, January 9th, 2026 at 6:30 PM EST</p>
             {timeUntilReveal && (
               <div className="grid grid-cols-4 gap-4 text-center max-w-md w-full">
                 <div className="bg-slate-700 rounded-lg p-4">

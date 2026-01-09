@@ -710,7 +710,7 @@ function EnterTeam(){
           <h2 className="text-2xl font-bold mb-4 text-gray-800">Team Submitted Successfully!</h2>
           <p className="text-gray-700 mb-2">Your team has been saved.</p>
           <p className="text-gray-700 font-semibold mb-6">
-            Check back Friday, January 9th at 8:00 PM EST to see everyone's teams!
+            Check back Friday, January 9th at 6:30 PM EST to see everyone's teams!
           </p>
           <button 
             onClick={() => {
